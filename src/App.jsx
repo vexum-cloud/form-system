@@ -587,7 +587,7 @@ export default function PersonalityDiagnosisApp() {
     } else if (!matchedForm && path !== "" && path !== "admin") {
       setMode("landing");
     }
-  }, [location.pathname]);
+  }, [location.pathname, isAdminLoggedIn]);
 
   // --- 回答者情報入力後 → 質問開始 ---
   const startQuestions = () => {
