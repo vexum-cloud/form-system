@@ -461,6 +461,46 @@ const GLOBAL_CSS = `
   ::-webkit-scrollbar-thumb { background: #D5CFC8; border-radius: 3px; }
 `;
 
+// --- 共通UIコンポーネント（メインコンポーネントの外に定義してフォーカス喪失を防止） ---
+const Input = ({ value, onChange, placeholder, type = "text", style: extraStyle, disabled }) => (
+  <input type={type} value={value}
+    onChange={(e) => onChange(e.target.value)}
+    placeholder={placeholder} disabled={disabled}
+    style={{ width: "100%", padding: "10px 14px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, fontSize: 14, fontFamily: S.font, color: S.text, background: disabled ? "#F0EDE9" : "#FAFAF8", transition: "all 0.2s", ...extraStyle }} />
+);
+const TextArea = ({ value, onChange, placeholder, rows = 4 }) => (
+  <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows}
+    style={{ width: "100%", padding: "10px 14px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, fontSize: 14, fontFamily: S.font, color: S.text, background: "#FAFAF8", resize: "vertical", lineHeight: 1.7, transition: "all 0.2s" }} />
+);
+const Label = ({ children }) => (
+  <div style={{ fontSize: 12, fontWeight: 700, color: S.textMuted, marginBottom: 6, letterSpacing: "0.03em" }}>{children}</div>
+);
+const Modal = ({ title, onClose, onSave, children, width = 560 }) => (
+  <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(45,42,38,0.4)", backdropFilter: "blur(4px)" }} onClick={onClose}>
+    <div style={{ background: S.card, borderRadius: "20px", width: "90%", maxWidth: width, maxHeight: "85vh", overflow: "auto", boxShadow: S.shadowLg, animation: "scaleIn 0.3s ease-out" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ padding: "20px 24px", borderBottom: `1px solid ${S.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: S.card, borderRadius: "20px 20px 0 0", zIndex: 1 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 900, color: S.text }}>{title}</h3>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: S.textMuted, padding: 4 }}><Icon name="x" size={20} /></button>
+      </div>
+      <div style={{ padding: "20px 24px" }}>{children}</div>
+      {onSave && (
+        <div style={{ padding: "16px 24px", borderTop: `1px solid ${S.border}`, display: "flex", justifyContent: "flex-end", gap: 10, position: "sticky", bottom: 0, background: S.card, borderRadius: "0 0 20px 20px" }}>
+          <button onClick={onClose} style={{ padding: "10px 20px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, background: S.card, cursor: "pointer", fontSize: 13, fontWeight: 600, color: S.textMuted, fontFamily: S.font }}>キャンセル</button>
+          <button onClick={onSave} style={{ padding: "10px 24px", borderRadius: S.radiusSm, border: "none", background: S.accent, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: S.font }}>保存</button>
+        </div>
+      )}
+    </div>
+  </div>
+);
+const Toggle = ({ on, onToggle, label }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={onToggle}>
+    <div style={{ width: 44, height: 24, borderRadius: 12, background: on ? S.accent : "#D5CFC8", position: "relative", transition: "background 0.2s" }}>
+      <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: on ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }} />
+    </div>
+    {label && <span style={{ fontSize: 13, fontWeight: 600, color: on ? S.accent : S.textMuted }}>{label}</span>}
+  </div>
+);
+
 // ============================================================
 // メインアプリケーション
 // ============================================================
@@ -772,48 +812,6 @@ export default function PersonalityDiagnosisApp() {
   const toggleShowResult = (formId) => {
     setForms((prev) => prev.map((f) => f.id === formId ? { ...f, showResultToRespondent: !f.showResultToRespondent } : f));
   };
-
-  // --- 共通UIコンポーネント ---
-  const Input = ({ value, onChange, placeholder, type = "text", style: extraStyle, disabled }) => (
-    <input type={type} value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder} disabled={disabled}
-      style={{ width: "100%", padding: "10px 14px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, fontSize: 14, fontFamily: S.font, color: S.text, background: disabled ? "#F0EDE9" : "#FAFAF8", transition: "all 0.2s", ...extraStyle }} />
-  );
-  const TextArea = ({ value, onChange, placeholder, rows = 4 }) => (
-    <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows}
-      style={{ width: "100%", padding: "10px 14px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, fontSize: 14, fontFamily: S.font, color: S.text, background: "#FAFAF8", resize: "vertical", lineHeight: 1.7, transition: "all 0.2s" }} />
-  );
-  const Label = ({ children }) => (
-    <div style={{ fontSize: 12, fontWeight: 700, color: S.textMuted, marginBottom: 6, letterSpacing: "0.03em" }}>{children}</div>
-  );
-  const Modal = ({ title, onClose, onSave, children, width = 560 }) => (
-    <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(45,42,38,0.4)", backdropFilter: "blur(4px)" }} onClick={onClose}>
-      <div style={{ background: S.card, borderRadius: "20px", width: "90%", maxWidth: width, maxHeight: "85vh", overflow: "auto", boxShadow: S.shadowLg, animation: "scaleIn 0.3s ease-out" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ padding: "20px 24px", borderBottom: `1px solid ${S.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: S.card, borderRadius: "20px 20px 0 0", zIndex: 1 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 900, color: S.text }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: S.textMuted, padding: 4 }}><Icon name="x" size={20} /></button>
-        </div>
-        <div style={{ padding: "20px 24px" }}>{children}</div>
-        {onSave && (
-          <div style={{ padding: "16px 24px", borderTop: `1px solid ${S.border}`, display: "flex", justifyContent: "flex-end", gap: 10, position: "sticky", bottom: 0, background: S.card, borderRadius: "0 0 20px 20px" }}>
-            <button onClick={onClose} style={{ padding: "10px 20px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, background: S.card, cursor: "pointer", fontSize: 13, fontWeight: 600, color: S.textMuted, fontFamily: S.font }}>キャンセル</button>
-            <button onClick={onSave} style={{ padding: "10px 24px", borderRadius: S.radiusSm, border: "none", background: S.accent, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: S.font }}>保存</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // トグルスイッチ
-  const Toggle = ({ on, onToggle, label }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={onToggle}>
-      <div style={{ width: 44, height: 24, borderRadius: 12, background: on ? S.accent : "#D5CFC8", position: "relative", transition: "background 0.2s" }}>
-        <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: on ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }} />
-      </div>
-      {label && <span style={{ fontSize: 13, fontWeight: 600, color: on ? S.accent : S.textMuted }}>{label}</span>}
-    </div>
-  );
 
   // ============================================================
   // ランディング画面
