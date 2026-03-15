@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 
 // ============================================================
@@ -692,7 +692,6 @@ export default function PersonalityDiagnosisApp() {
       setMode("admin");
       setAdminLoginError(false);
       setAdminLoginInput("");
-      navigate("/admin");
     } else {
       setAdminLoginError(true);
     }
@@ -774,8 +773,13 @@ export default function PersonalityDiagnosisApp() {
   };
 
   // --- 共通UIコンポーネント ---
+  const composingRef = useRef(false);
   const Input = ({ value, onChange, placeholder, type = "text", style: extraStyle, disabled }) => (
-    <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
+    <input type={type} value={value}
+      onChange={(e) => { if (!composingRef.current) onChange(e.target.value); }}
+      onCompositionStart={() => { composingRef.current = true; }}
+      onCompositionEnd={(e) => { composingRef.current = false; onChange(e.target.value); }}
+      placeholder={placeholder} disabled={disabled}
       style={{ width: "100%", padding: "10px 14px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, fontSize: 14, fontFamily: S.font, color: S.text, background: disabled ? "#F0EDE9" : "#FAFAF8", transition: "all 0.2s", ...extraStyle }} />
   );
   const TextArea = ({ value, onChange, placeholder, rows = 4 }) => (
@@ -1010,16 +1014,7 @@ export default function PersonalityDiagnosisApp() {
                 </div>
               </>
             )}
-            <div style={{ display: "flex", gap: 12, animation: "fadeUp 0.8s ease-out 0.6s both" }}>
-              <button className="btn-hover" onClick={() => startDiagnosis(activeFormId)}
-                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, background: S.card, cursor: "pointer", fontSize: 14, fontWeight: 600, color: S.text, fontFamily: S.font, transition: "all 0.2s" }}>
-                <Icon name="restart" size={16} /> もう一度
-              </button>
-              <button className="btn-hover" onClick={() => { setMode("landing"); navigate("/"); }}
-                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: S.radiusSm, border: "none", background: S.accent, cursor: "pointer", fontSize: 14, fontWeight: 600, color: "#fff", fontFamily: S.font, transition: "all 0.2s" }}>
-                <Icon name="home" size={16} /> トップへ
-              </button>
-            </div>
+
           </div>
         </div>
       );
