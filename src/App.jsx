@@ -499,6 +499,7 @@ export default function PersonalityDiagnosisApp() {
 
   // --- 管理者UI ---
   const [adminTab, setAdminTab] = useState("responses");
+  const [adminSelectedFormId, setAdminSelectedFormId] = useState(INITIAL_FORMS[0]?.id || "");
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [editingType, setEditingType] = useState(null);
   const [editingForm, setEditingForm] = useState(null);
@@ -1070,8 +1071,6 @@ export default function PersonalityDiagnosisApp() {
   // ============================================================
   // 管理者画面
   // ============================================================
-  // --- 管理者画面: フォーム選択 ---
-  const [adminSelectedFormId, setAdminSelectedFormId] = useState(forms[0]?.id || "");
   const adminSelectedForm = forms.find((f) => f.id === adminSelectedFormId);
 
   const adminTabs = [
