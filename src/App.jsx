@@ -1287,13 +1287,6 @@ export default function PersonalityDiagnosisApp() {
 
   const visibleForms = isCreatorLoggedIn ? forms.filter((f) => f.creatorName === loggedInCreatorName) : forms;
 
-  // デフォルトタブの補正
-  useEffect(() => {
-    if (isCreatorLoggedIn && (adminTab === "responses" || adminTab === "settings")) {
-      setAdminTab("forms");
-    }
-  }, [isCreatorLoggedIn, adminTab]);
-
   // 管理者質問一覧のフォーム別フィルター用
   const getFormForQuestion = (qId) => visibleForms.filter((f) => f.questionIds.includes(qId));
 
