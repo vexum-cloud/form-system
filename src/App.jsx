@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { db } from "./firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, setDoc } from "firebase/firestore";
 
 // ============================================================
 // 性格診断フォーム作成システム（完全版）
@@ -519,6 +519,7 @@ export default function PersonalityDiagnosisApp() {
   const [forms, setForms] = useState(INITIAL_FORMS);
   const [responses, setResponses] = useState([]);
   const [firestoreLoaded, setFirestoreLoaded] = useState(false);
+  const [formsLoaded, setFormsLoaded] = useState(false);
 
   // --- 管理者認証 ---
   const [adminPassword, setAdminPassword] = useState("admin2024");
@@ -564,7 +565,7 @@ export default function PersonalityDiagnosisApp() {
   const [newPasswordInput, setNewPasswordInput] = useState("");
   const [passwordChangeMsg, setPasswordChangeMsg] = useState("");
 
-  // --- Firestoreから回答データを取得 ---
+  // Firestoreから回答データを取得
   const fetchResponses = useCallback(async () => {
     try {
       const snap = await getDocs(collection(db, "responses"));
@@ -578,10 +579,29 @@ export default function PersonalityDiagnosisApp() {
     }
   }, []);
 
-  // 初回マウント時とadminログイン時にFirestoreから取得
+  // Firestoreからフォームデータを取得してINITIAL_FORMSとマージ
+  const fetchForms = useCallback(async () => {
+    try {
+      const snap = await getDocs(collection(db, "forms"));
+      if (!snap.empty) {
+        const firestoreForms = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
+        // INITIAL_FORMSにないフォームのみFirestoreから追加、既存はFirestoreで上書き
+        const mergedIds = new Set(firestoreForms.map((f) => f.id));
+        const base = INITIAL_FORMS.filter((f) => !mergedIds.has(f.id));
+        setForms([...base, ...firestoreForms]);
+      }
+      setFormsLoaded(true);
+    } catch (e) {
+      console.error("Firestore フォーム読み込みエラー:", e);
+      setFormsLoaded(true);
+    }
+  }, []);
+
+  // 初回マウント時にFirestoreから取得
   useEffect(() => {
     fetchResponses();
-  }, [fetchResponses]);
+    fetchForms();
+  }, [fetchResponses, fetchForms]);
 
   // --- トースト ---
   const showToast = useCallback((msg) => {
@@ -825,15 +845,27 @@ export default function PersonalityDiagnosisApp() {
     const newId = "form_" + uid();
     setEditingForm({ id: newId, slug: newId, name: "", description: "", questionIds: [], typeIds: types.map((t) => t.id), showResultToRespondent: true, showScoreDetails: true, createdAt: Date.now(), isNew: true });
   };
-  const saveForm = () => {
+  const saveForm = async () => {
     if (!editingForm || !editingForm.name.trim()) return;
-    const { isNew, ...f } = editingForm;
+    const { isNew, _docId, ...f } = editingForm;
+    // slugが空なら id を使う
+    if (!f.slug) f.slug = f.id;
+    try {
+      await setDoc(doc(db, "forms", f.id), f);
+    } catch (e) {
+      console.error("フォーム保存エラー:", e);
+    }
     if (isNew) setForms((prev) => [...prev, f]);
     else setForms((prev) => prev.map((p) => (p.id === f.id ? f : p)));
     setEditingForm(null);
     showToast("フォームを保存しました");
   };
-  const deleteForm = (id) => {
+  const deleteForm = async (id) => {
+    try {
+      await deleteDoc(doc(db, "forms", id));
+    } catch (e) {
+      console.error("フォーム削除エラー:", e);
+    }
     setForms((prev) => prev.filter((f) => f.id !== id));
     showToast("フォームを削除しました");
   };
