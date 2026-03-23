@@ -572,7 +572,7 @@ export default function PersonalityDiagnosisApp() {
   const [adminLoginError, setAdminLoginError] = useState(false);
 
   // --- サブ管理者（作成者）認証 ---
-  const [creatorPassword, setCreatorPassword] = useState("creator2024");
+  const [creators, setCreators] = useState([]);
   const [isCreatorLoggedIn, setIsCreatorLoggedIn] = useState(false);
   const [loggedInCreatorName, setLoggedInCreatorName] = useState("");
   const [creatorLoginNameInput, setCreatorLoginNameInput] = useState("");
@@ -617,8 +617,8 @@ export default function PersonalityDiagnosisApp() {
   // --- 設定画面用 ---
   const [newPasswordInput, setNewPasswordInput] = useState("");
   const [passwordChangeMsg, setPasswordChangeMsg] = useState("");
-  const [newCreatorPasswordInput, setNewCreatorPasswordInput] = useState("");
-  const [creatorPasswordChangeMsg, setCreatorPasswordChangeMsg] = useState("");
+  const [newCreatorName, setNewCreatorName] = useState("");
+  const [newCreatorPass, setNewCreatorPass] = useState("");
 
   // Firestoreから回答データを取得
   const fetchResponses = useCallback(async () => {
@@ -652,11 +652,25 @@ export default function PersonalityDiagnosisApp() {
     }
   }, []);
 
+  // Firestoreからサブ管理者（作成者）データを取得
+  const fetchCreators = useCallback(async () => {
+    if (!db) return;
+    try {
+      const qs = await getDocs(collection(db, "creators"));
+      const list = [];
+      qs.forEach((doc) => list.push({ ...doc.data(), id: doc.id }));
+      setCreators(list.sort((a, b) => b.createdAt - a.createdAt));
+    } catch (e) {
+      console.error("Firestore creators 読み込みエラー:", e);
+    }
+  }, []);
+
   // 初回マウント時にFirestoreから取得
   useEffect(() => {
     fetchResponses();
     fetchForms();
-  }, [fetchResponses, fetchForms]);
+    fetchCreators();
+  }, [fetchResponses, fetchForms, fetchCreators]);
 
   // --- トースト ---
   const showToast = useCallback((msg) => {
@@ -710,6 +724,16 @@ export default function PersonalityDiagnosisApp() {
     }
   };
 
+  // --- 専用パラメータによる作成名自動入力 ---
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const cName = searchParams.get("creatorName");
+    if (cName) {
+      setLoginTab("creator");
+      setCreatorLoginNameInput(decodeURIComponent(cName));
+    }
+  }, [location.search]);
+
   // --- ルートに基づくフォーム自動選択 ---
   useEffect(() => {
     const path = location.pathname.replace(/^\//, "").replace(/\/$/, "");
@@ -729,7 +753,7 @@ export default function PersonalityDiagnosisApp() {
     } else if (!matchedForm && path !== "" && path !== "admin") {
       setMode("landing");
     }
-  }, [location.pathname, isAdminLoggedIn, forms, formsLoaded]);
+  }, [location.pathname, isAdminLoggedIn, isCreatorLoggedIn, forms, formsLoaded]);
 
   // --- 回答者情報入力後 → 質問開始 ---
   const startQuestions = () => {
@@ -852,7 +876,8 @@ export default function PersonalityDiagnosisApp() {
       setCreatorLoginError(true);
       return;
     }
-    if (creatorLoginPassInput === creatorPassword) {
+    const targetCreator = creators.find((c) => c.name === creatorLoginNameInput.trim());
+    if (targetCreator && creatorLoginPassInput === targetCreator.password) {
       setIsCreatorLoggedIn(true);
       setIsAdminLoggedIn(false);
       setLoggedInCreatorName(creatorLoginNameInput.trim());
@@ -860,7 +885,7 @@ export default function PersonalityDiagnosisApp() {
       setAdminTab("forms");
       setCreatorLoginError(false);
       setCreatorLoginPassInput("");
-      setCreatorLoginNameInput("");
+      // URLから名前が渡された場合のために名前はクリアしないでおく
     } else {
       setCreatorLoginError(true);
     }
@@ -1085,9 +1110,9 @@ export default function PersonalityDiagnosisApp() {
             <form onSubmit={handleCreatorLogin}>
               <div style={{ marginBottom: 16 }}>
                 <input
-                  type="text" value={creatorLoginNameInput} placeholder="あなたの名前（作成者名）"
+                  type="text" value={creatorLoginNameInput} placeholder="あなたの名前（作成者名）" readOnly={!!new URLSearchParams(location.search).get("creatorName")}
                   onChange={(e) => { setCreatorLoginNameInput(e.target.value); setCreatorLoginError(false); }}
-                  style={{ width: "100%", padding: "14px 16px", borderRadius: S.radiusSm, border: `1.5px solid ${creatorLoginError && !creatorLoginNameInput ? S.danger : S.border}`, fontSize: 15, fontFamily: S.font, color: S.text, background: "#FAFAF8", transition: "all 0.2s" }}
+                  style={{ width: "100%", padding: "14px 16px", borderRadius: S.radiusSm, border: `1.5px solid ${creatorLoginError && !creatorLoginNameInput ? S.danger : S.border}`, fontSize: 15, fontFamily: S.font, color: !!new URLSearchParams(location.search).get("creatorName") ? S.textMuted : S.text, background: !!new URLSearchParams(location.search).get("creatorName") ? "#EBEBEB" : "#FAFAF8", transition: "all 0.2s" }}
                 />
               </div>
               <div style={{ marginBottom: 16 }}>
@@ -1793,33 +1818,69 @@ export default function PersonalityDiagnosisApp() {
               </div>
             </div>
 
-            {/* 作成者用パスワード */}
+            {/* サブ管理者管理 */}
             <div style={{ background: S.card, borderRadius: S.radius, padding: "24px", boxShadow: S.shadow, border: `1px solid ${S.border}` }}>
-              <h3 style={{ fontSize: 16, fontWeight: 900, color: S.text, marginBottom: 12 }}>フォーム作成者用共通パスワードの変更</h3>
-              <p style={{ fontSize: 13, color: S.textMuted, marginBottom: 16 }}>作成者がログインして自分のフォームを作成・編集するときに使う共通パスワードです。</p>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 900, color: S.text, marginBottom: 4 }}>サブ管理者（フォーム作成者）の管理</h3>
+                  <p style={{ fontSize: 13, color: S.textMuted }}>個別のアカウントを発行し、専用ログインURLを生成します。</p>
+                </div>
+              </div>
+
+              {/* 追加フォーム */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
                 <input
-                  type="password" value={newCreatorPasswordInput} onChange={(e) => setNewCreatorPasswordInput(e.target.value)}
-                  placeholder="新しい作成者パスワード"
-                  style={{ flex: 1, minWidth: 200, padding: "10px 14px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, fontSize: 14, fontFamily: S.font, color: S.text, background: "#FAFAF8" }}
+                  type="text" value={newCreatorName} onChange={(e) => setNewCreatorName(e.target.value)}
+                  placeholder="サブ管理者の名前"
+                  style={{ flex: 1, minWidth: 160, padding: "10px 14px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, fontSize: 14, fontFamily: S.font, background: "#FAFAF8" }}
                 />
-                <button onClick={() => {
-                  if (newCreatorPasswordInput.length >= 4) {
-                    setCreatorPassword(newCreatorPasswordInput.trim());
-                    setNewCreatorPasswordInput("");
-                    setCreatorPasswordChangeMsg("作成者パスワードを変更しました");
-                    setTimeout(() => setCreatorPasswordChangeMsg(""), 3000);
-                  } else {
-                    setCreatorPasswordChangeMsg("4文字以上で入力してください");
-                    setTimeout(() => setCreatorPasswordChangeMsg(""), 3000);
-                  }
+                <input
+                  type="password" value={newCreatorPass} onChange={(e) => setNewCreatorPass(e.target.value)}
+                  placeholder="パスワード(4文字以上)"
+                  style={{ flex: 1, minWidth: 160, padding: "10px 14px", borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, fontSize: 14, fontFamily: S.font, background: "#FAFAF8" }}
+                />
+                <button onClick={async () => {
+                  const name = newCreatorName.trim();
+                  const pass = newCreatorPass.trim();
+                  if (!name || pass.length < 4) return showToast("名前と4文字以上のパスワードを入力してください");
+                  const newId = "creator_" + uid();
+                  await setDoc(doc(db, "creators", newId), { name, password: pass, createdAt: Date.now() });
+                  setNewCreatorName(""); setNewCreatorPass("");
+                  fetchCreators();
+                  showToast("サブ管理者を追加しました");
                 }}
-                  style={{ padding: "10px 24px", borderRadius: S.radiusSm, border: "none", background: S.accent, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: S.font }}>
-                  パスワードを変更
+                  style={{ padding: "10px 20px", borderRadius: S.radiusSm, border: "none", background: S.accent, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: S.font }}>
+                  追加
                 </button>
-                {creatorPasswordChangeMsg && (
-                  <div style={{ marginTop: 10, fontSize: 13, fontWeight: 600, color: creatorPasswordChangeMsg.includes("変更しました") ? "#43A047" : S.danger, width: "100%" }}>{creatorPasswordChangeMsg}</div>
-                )}
+              </div>
+
+              {/* 既存サブ管理者一覧 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {creators.map(c => (
+                  <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#FAFAF8", borderRadius: S.radiusSm, border: `1px solid ${S.border}` }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: S.text }}>{c.name}</div>
+                      <div style={{ fontSize: 12, color: S.textMuted }}>パスワード: {c.password}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => {
+                        const url = `${window.location.origin}${window.location.pathname}#/admin?creatorName=${encodeURIComponent(c.name)}`;
+                        navigator.clipboard.writeText(url);
+                        showToast("専用ログインURLをコピーしました");
+                      }}
+                        style={{ background: "#EEF2FF", border: `1px solid #C7D2FE`, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#4F46E5" }}>
+                        URLを発行
+                      </button>
+                      <button onClick={async () => {
+                        if (!window.confirm(`「${c.name}」を削除しますか？`)) return;
+                        await deleteDoc(doc(db, "creators", c.id));
+                        fetchCreators();
+                        showToast("削除しました");
+                      }} style={{ background: S.dangerLight, border: "none", borderRadius: 6, padding: "8px 12px", cursor: "pointer", color: S.danger }}><Icon name="trash" size={14} /></button>
+                    </div>
+                  </div>
+                ))}
+                {creators.length === 0 && <div style={{ fontSize: 13, color: S.textMuted, textAlign: "center", padding: "20px 0" }}>サブ管理者は登録されていません</div>}
               </div>
             </div>
           </div>
