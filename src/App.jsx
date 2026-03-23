@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { db } from "./firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, setDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc } from "firebase/firestore";
 
 // ============================================================
 // 性格診断フォーム作成システム（完全版）
@@ -665,12 +665,26 @@ export default function PersonalityDiagnosisApp() {
     }
   }, []);
 
+  // Firestoreから設定（システム管理者パスワードなど）を取得
+  const fetchSettings = useCallback(async () => {
+    if (!db) return;
+    try {
+      const docSnap = await getDoc(doc(db, "settings", "admin"));
+      if (docSnap.exists() && docSnap.data().password) {
+        setAdminPassword(docSnap.data().password);
+      }
+    } catch (e) {
+      console.error("Firestore settings 読み込みエラー:", e);
+    }
+  }, []);
+
   // 初回マウント時にFirestoreから取得
   useEffect(() => {
     fetchResponses();
     fetchForms();
     fetchCreators();
-  }, [fetchResponses, fetchForms, fetchCreators]);
+    fetchSettings();
+  }, [fetchResponses, fetchForms, fetchCreators, fetchSettings]);
 
   // --- トースト ---
   const showToast = useCallback((msg) => {
@@ -1798,9 +1812,15 @@ export default function PersonalityDiagnosisApp() {
                   <Label>新しいパスワード</Label>
                   <Input type="password" value={newPasswordInput} onChange={setNewPasswordInput} placeholder="新しいパスワードを入力" />
                 </div>
-                <button onClick={() => {
+                <button onClick={async () => {
                   if (newPasswordInput.trim().length >= 4) {
-                    setAdminPassword(newPasswordInput.trim());
+                    const newPass = newPasswordInput.trim();
+                    setAdminPassword(newPass);
+                    try {
+                      await setDoc(doc(db, "settings", "admin"), { password: newPass }, { merge: true });
+                    } catch (e) {
+                      console.error("Failed to save password:", e);
+                    }
                     setNewPasswordInput("");
                     setPasswordChangeMsg("パスワードを変更しました");
                     setTimeout(() => setPasswordChangeMsg(""), 3000);
