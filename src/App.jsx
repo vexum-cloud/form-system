@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { db } from "./firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, query, where } from "firebase/firestore";
 
 // ============================================================
 // 性格診断フォーム作成システム（完全版）
@@ -564,6 +564,8 @@ export default function PersonalityDiagnosisApp() {
   const [responses, setResponses] = useState([]);
   const [firestoreLoaded, setFirestoreLoaded] = useState(false);
   const [formsLoaded, setFormsLoaded] = useState(false);
+  const [typesLoaded, setTypesLoaded] = useState(false);
+  const [questionsLoaded, setQuestionsLoaded] = useState(false);
 
   // --- 管理者認証 ---
   const [adminPassword, setAdminPassword] = useState("shikirama2026");
@@ -678,13 +680,73 @@ export default function PersonalityDiagnosisApp() {
     }
   }, []);
 
+  // FirestoreからカスタムTypes取得（サブ管理者は自分のもの、管理者は全件+ハードコード）
+  const fetchTypes = useCallback(async (creatorName) => {
+    try {
+      const q = creatorName
+        ? query(collection(db, "types"), where("creatorName", "==", creatorName))
+        : collection(db, "types");
+      const snap = await getDocs(q);
+      const firestoreTypes = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
+      if (creatorName) {
+        // サブ管理者：Firestoreの自分のタイプのみ（ハードコードなし）
+        setTypes(firestoreTypes);
+      } else {
+        // 管理者：ハードコード + Firestoreの全カスタムタイプ（重複除外）
+        const fsIds = new Set(firestoreTypes.map(t => t.id));
+        setTypes([...ALL_TYPES.filter(t => !fsIds.has(t.id)), ...firestoreTypes]);
+      }
+      setTypesLoaded(true);
+    } catch (e) {
+      console.error("Firestore types 読み込みエラー:", e);
+      setTypesLoaded(true);
+    }
+  }, []);
+
+  // FirestoreからカスタムQuestions取得
+  const fetchQuestions = useCallback(async (creatorName) => {
+    try {
+      const q = creatorName
+        ? query(collection(db, "questions"), where("creatorName", "==", creatorName))
+        : collection(db, "questions");
+      const snap = await getDocs(q);
+      const firestoreQs = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
+      if (creatorName) {
+        // サブ管理者：自分の質問のみ
+        setQuestions(firestoreQs);
+      } else {
+        // 管理者：ハードコード + Firestoreの全カスタム質問
+        const fsIds = new Set(firestoreQs.map(q => q.id));
+        setQuestions([...ALL_QUESTIONS.filter(q => !fsIds.has(q.id)), ...firestoreQs]);
+      }
+      setQuestionsLoaded(true);
+    } catch (e) {
+      console.error("Firestore questions 読み込みエラー:", e);
+      setQuestionsLoaded(true);
+    }
+  }, []);
+
   // 初回マウント時にFirestoreから取得
   useEffect(() => {
     fetchResponses();
     fetchForms();
     fetchCreators();
     fetchSettings();
-  }, [fetchResponses, fetchForms, fetchCreators, fetchSettings]);
+    // 初期ロードはシステム管理者用（全件）
+    fetchTypes(null);
+    fetchQuestions(null);
+  }, [fetchResponses, fetchForms, fetchCreators, fetchSettings, fetchTypes, fetchQuestions]);
+
+  // サブ管理者ログイン時にそのクリエイターのタイプ・質問を再取得
+  useEffect(() => {
+    if (isCreatorLoggedIn && loggedInCreatorName) {
+      fetchTypes(loggedInCreatorName);
+      fetchQuestions(loggedInCreatorName);
+    } else if (!isCreatorLoggedIn) {
+      fetchTypes(null);
+      fetchQuestions(null);
+    }
+  }, [isCreatorLoggedIn, loggedInCreatorName, fetchTypes, fetchQuestions]);
 
   // --- トースト ---
   const showToast = useCallback((msg) => {
@@ -926,17 +988,42 @@ export default function PersonalityDiagnosisApp() {
         { id: newId + "_d", label: "", typeId: types[3]?.id || "", score: 1 },
       ],
       isNew: true,
+      creatorName: isCreatorLoggedIn ? loggedInCreatorName : "",
     });
   };
-  const saveQuestion = () => {
+  const saveQuestion = async () => {
     if (!editingQuestion || !editingQuestion.text.trim()) return;
-    const { isNew, ...q } = editingQuestion;
-    if (isNew) setQuestions((prev) => [...prev, q]);
-    else setQuestions((prev) => prev.map((p) => (p.id === q.id ? q : p)));
+    const { isNew, _docId, ...q } = editingQuestion;
+    // Firestoreに保存（creatorNameあり or サブ管理者の新規）
+    if (isCreatorLoggedIn || q.creatorName) {
+      const qWithCreator = { ...q, creatorName: isCreatorLoggedIn ? loggedInCreatorName : (q.creatorName || "") };
+      try {
+        await setDoc(doc(db, "questions", q.id), qWithCreator);
+        if (isNew) setQuestions((prev) => [...prev, { ...qWithCreator, _docId: q.id }]);
+        else setQuestions((prev) => prev.map((p) => p.id === q.id ? { ...qWithCreator, _docId: _docId || q.id } : p));
+      } catch (e) { console.error("質問保存エラー:", e); }
+    } else {
+      if (isNew) setQuestions((prev) => [...prev, q]);
+      else setQuestions((prev) => prev.map((p) => p.id === q.id ? q : p));
+    }
+    // 新規質問は現在選択中フォームに自動追加
+    if (isNew && adminSelectedFormId) {
+      setForms((prev) => prev.map((f) => {
+        if (f.id !== adminSelectedFormId) return f;
+        const updated = { ...f, questionIds: [...f.questionIds, q.id] };
+        const { _docId: fd, ...toSave } = updated;
+        setDoc(doc(db, "forms", f.id), toSave).catch(console.error);
+        return updated;
+      }));
+    }
     setEditingQuestion(null);
     showToast("質問を保存しました");
   };
-  const deleteQuestion = (id) => {
+  const deleteQuestion = async (id) => {
+    const target = questions.find(q => q.id === id);
+    if (target?._docId || target?.creatorName) {
+      try { await deleteDoc(doc(db, "questions", target._docId || id)); } catch (e) { console.error(e); }
+    }
     setQuestions((prev) => prev.filter((q) => q.id !== id));
     setForms((prev) => prev.map((f) => ({ ...f, questionIds: f.questionIds.filter((qid) => qid !== id) })));
     showToast("質問を削除しました");
@@ -944,17 +1031,41 @@ export default function PersonalityDiagnosisApp() {
 
   // タイプCRUD
   const addType = () => {
-    setEditingType({ id: "type_" + uid(), name: "", color: "#888888", icon: "🔷", userDescription: "", adminDescription: "", isNew: true });
+    setEditingType({ id: "type_" + uid(), name: "", color: "#888888", icon: "🔷", userDescription: "", adminDescription: "", isNew: true, creatorName: isCreatorLoggedIn ? loggedInCreatorName : "" });
   };
-  const saveType = () => {
+  const saveType = async () => {
     if (!editingType || !editingType.name.trim()) return;
-    const { isNew, ...t } = editingType;
-    if (isNew) setTypes((prev) => [...prev, t]);
-    else setTypes((prev) => prev.map((p) => (p.id === t.id ? t : p)));
+    const { isNew, _docId, ...t } = editingType;
+    // Firestoreに保存（creatorNameあり or サブ管理者）
+    if (isCreatorLoggedIn || t.creatorName) {
+      const tWithCreator = { ...t, creatorName: isCreatorLoggedIn ? loggedInCreatorName : (t.creatorName || "") };
+      try {
+        await setDoc(doc(db, "types", t.id), tWithCreator);
+        if (isNew) setTypes((prev) => [...prev, { ...tWithCreator, _docId: t.id }]);
+        else setTypes((prev) => prev.map((p) => p.id === t.id ? { ...tWithCreator, _docId: _docId || t.id } : p));
+      } catch (e) { console.error("タイプ保存エラー:", e); }
+    } else {
+      if (isNew) setTypes((prev) => [...prev, t]);
+      else setTypes((prev) => prev.map((p) => p.id === t.id ? t : p));
+    }
+    // 新規タイプは現在選択中フォームに自動追加
+    if (isNew && adminSelectedFormId) {
+      setForms((prev) => prev.map((f) => {
+        if (f.id !== adminSelectedFormId) return f;
+        const updated = { ...f, typeIds: [...f.typeIds, t.id] };
+        const { _docId: fd, ...toSave } = updated;
+        setDoc(doc(db, "forms", f.id), toSave).catch(console.error);
+        return updated;
+      }));
+    }
     setEditingType(null);
     showToast("タイプを保存しました");
   };
-  const deleteType = (id) => {
+  const deleteType = async (id) => {
+    const target = types.find(t => t.id === id);
+    if (target?._docId || target?.creatorName) {
+      try { await deleteDoc(doc(db, "types", target._docId || id)); } catch (e) { console.error(e); }
+    }
     setTypes((prev) => prev.filter((t) => t.id !== id));
     setForms((prev) => prev.map((f) => ({ ...f, typeIds: f.typeIds.filter((tid) => tid !== id) })));
     showToast("タイプを削除しました");
@@ -993,19 +1104,25 @@ export default function PersonalityDiagnosisApp() {
   // 複製
   const duplicateQuestion = async (q) => {
     const newId = "q_" + uid();
+    const { _docId, ...qData } = q;
     const newQ = {
-      ...q,
+      ...qData,
       id: newId,
       text: q.text + "（コピー）",
       choices: q.choices.map((c, i) => ({ ...c, id: newId + "_" + ["a","b","c","d","e","f"][i] })),
+      creatorName: isCreatorLoggedIn ? loggedInCreatorName : (q.creatorName || ""),
     };
-    setQuestions((prev) => [...prev, newQ]);
+    // Firestoreに保存（サブ管理者 or 既存のcreatorNameあり）
+    if (isCreatorLoggedIn || q.creatorName) {
+      await setDoc(doc(db, "questions", newId), newQ).catch(console.error);
+    }
+    setQuestions((prev) => [...prev, { ...newQ, _docId: newId }]);
     // 現在選択中のフォームに自動追加 + Firestore保存
     if (adminSelectedFormId) {
       setForms((prev) => prev.map((f) => {
         if (f.id !== adminSelectedFormId) return f;
         const updated = { ...f, questionIds: [...f.questionIds, newId] };
-        const { _docId, ...toSave } = updated;
+        const { _docId: fd, ...toSave } = updated;
         setDoc(doc(db, "forms", f.id), toSave).catch(console.error);
         return updated;
       }));
@@ -1016,14 +1133,24 @@ export default function PersonalityDiagnosisApp() {
     }
   };
   const duplicateType = async (t) => {
-    const newT = { ...t, id: "type_" + uid(), name: t.name + "（コピー）" };
-    setTypes((prev) => [...prev, newT]);
+    const { _docId, ...tData } = t;
+    const newT = {
+      ...tData,
+      id: "type_" + uid(),
+      name: t.name + "（コピー）",
+      creatorName: isCreatorLoggedIn ? loggedInCreatorName : (t.creatorName || ""),
+    };
+    // Firestoreに保存
+    if (isCreatorLoggedIn || t.creatorName) {
+      await setDoc(doc(db, "types", newT.id), newT).catch(console.error);
+    }
+    setTypes((prev) => [...prev, { ...newT, _docId: newT.id }]);
     // 現在選択中のフォームに自動追加 + Firestore保存
     if (adminSelectedFormId) {
       setForms((prev) => prev.map((f) => {
         if (f.id !== adminSelectedFormId) return f;
         const updated = { ...f, typeIds: [...f.typeIds, newT.id] };
-        const { _docId, ...toSave } = updated;
+        const { _docId: fd, ...toSave } = updated;
         setDoc(doc(db, "forms", f.id), toSave).catch(console.error);
         return updated;
       }));
@@ -2079,7 +2206,7 @@ export default function PersonalityDiagnosisApp() {
               <div style={{ marginBottom: 14 }}>
                 <Label>使用するタイプ</Label>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {types.map((t) => {
+                  {(isCreatorLoggedIn ? types : types).map((t) => {
                     const inc = editingForm.typeIds.includes(t.id);
                     return (
                       <button key={t.id} onClick={() => setEditingForm((p) => ({ ...p, typeIds: inc ? p.typeIds.filter((id) => id !== t.id) : [...p.typeIds, t.id] }))}
@@ -2088,11 +2215,13 @@ export default function PersonalityDiagnosisApp() {
                       </button>
                     );
                   })}
+                  {types.length === 0 && <span style={{ fontSize: 12, color: S.textMuted }}>タイプ管理からタイプを追加してください</span>}
                 </div>
               </div>
               <div>
                 <Label>使用する質問（選択順で出題）</Label>
                 <div style={{ maxHeight: 300, overflow: "auto", border: `1px solid ${S.border}`, borderRadius: S.radiusSm }}>
+                  {questions.length === 0 && <div style={{ padding: 16, fontSize: 12, color: S.textMuted, textAlign: "center" }}>質問管理から質問を追加してください</div>}
                   {questions.map((q) => {
                     const idx = editingForm.questionIds.indexOf(q.id);
                     const inc = idx !== -1;
