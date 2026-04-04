@@ -1672,7 +1672,7 @@ export default function PersonalityDiagnosisApp() {
                         </div>
                         <div style={{ display: "flex", gap: 4, marginLeft: 8, flexShrink: 0 }}>
                           <button onClick={() => duplicateQuestion(q)} style={{ background: S.bg, border: "none", borderRadius: 6, padding: 6, cursor: "pointer", color: S.textMuted }} title="複製"><Icon name="copy" size={14} /></button>
-                          <button onClick={() => setEditingQuestion({ ...q })} style={{ background: S.bg, border: "none", borderRadius: 6, padding: 6, cursor: "pointer", color: S.textMuted }}><Icon name="edit" size={14} /></button>
+                          <button onClick={() => setEditingQuestion({ ...q })} style={{ background: S.bg, border: "none", borderRadius: 6, padding: 6, cursor: "pointer", fontSize: 14 }} title="編集">✏️</button>
                           <button onClick={() => deleteQuestion(q.id)} style={{ background: S.dangerLight, border: "none", borderRadius: 6, padding: 6, cursor: "pointer", color: S.danger }}><Icon name="trash" size={14} /></button>
                         </div>
                       </div>
@@ -1707,7 +1707,7 @@ export default function PersonalityDiagnosisApp() {
                     </div>
                     <div style={{ display: "flex", gap: 4 }}>
                       <button onClick={() => duplicateType(t)} style={{ background: S.bg, border: "none", borderRadius: 6, padding: 5, cursor: "pointer", color: S.textMuted }} title="複製"><Icon name="copy" size={13} /></button>
-                      <button onClick={() => setEditingType({ ...t })} style={{ background: S.bg, border: "none", borderRadius: 6, padding: 5, cursor: "pointer", color: S.textMuted }}><Icon name="edit" size={13} /></button>
+                      <button onClick={() => setEditingType({ ...t })} style={{ background: S.bg, border: "none", borderRadius: 6, padding: 5, cursor: "pointer", fontSize: 13 }} title="編集">✏️</button>
                       <button onClick={() => deleteType(t.id)} style={{ background: S.dangerLight, border: "none", borderRadius: 6, padding: 5, cursor: "pointer", color: S.danger }}><Icon name="trash" size={13} /></button>
                     </div>
                   </div>
@@ -1748,7 +1748,7 @@ export default function PersonalityDiagnosisApp() {
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => duplicateForm(f)} style={{ background: S.bg, border: "none", borderRadius: 8, padding: 8, cursor: "pointer", color: S.textMuted }} title="複製"><Icon name="copy" size={15} /></button>
-                        <button onClick={() => setEditingForm({ ...f })} style={{ background: S.bg, border: "none", borderRadius: 8, padding: 8, cursor: "pointer", color: S.textMuted }}><Icon name="edit" size={15} /></button>
+                        <button onClick={() => setEditingForm({ ...f })} style={{ background: S.bg, border: "none", borderRadius: 8, padding: 8, cursor: "pointer", fontSize: 15 }} title="編集">✏️</button>
                         <button onClick={() => deleteForm(f.id)} style={{ background: S.dangerLight, border: "none", borderRadius: 8, padding: 8, cursor: "pointer", color: S.danger }}><Icon name="trash" size={15} /></button>
                       </div>
                     </div>
