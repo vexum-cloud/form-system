@@ -1021,6 +1021,10 @@ export default function PersonalityDiagnosisApp() {
         return updated;
       }));
     }
+    // フォーム編集モーダル編集中ならそちらの状態にも反映
+    if (isNew) {
+      setEditingForm((p) => p ? { ...p, questionIds: [...p.questionIds, q.id] } : p);
+    }
     setEditingQuestion(null);
     showToast("質問を保存しました");
   };
@@ -2237,7 +2241,7 @@ export default function PersonalityDiagnosisApp() {
                 <Label>使用するタイプ</Label>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {types
-                    .filter(t => !t.formId || t.formId === editingForm.id || editingForm.typeIds.includes(t.id))
+                    .filter(t => t.formId === editingForm.id || editingForm.typeIds.includes(t.id))
                     .map((t) => {
                     const inc = editingForm.typeIds.includes(t.id);
                     return (
@@ -2247,15 +2251,42 @@ export default function PersonalityDiagnosisApp() {
                       </button>
                     );
                   })}
-                  {types.filter(t => !t.formId || t.formId === editingForm.id).length === 0 && <span style={{ fontSize: 12, color: S.textMuted }}>タイプ管理からタイプを追加してください</span>}
+                  {types.filter(t => t.formId === editingForm.id || editingForm.typeIds.includes(t.id)).length === 0 && <span style={{ fontSize: 12, color: S.textMuted }}>追加されたタイプがありません</span>}
+                </div>
+                
+                {/* フォーム編集内でのインライン新規タイプ作成 */}
+                <div style={{ marginTop: 12, padding: "12px", borderRadius: S.radiusSm, background: S.bg, border: `1px dashed ${S.border}` }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: S.textMuted, marginBottom: 8 }}>✨ 新しいタイプを追加</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <input id="form-inline-type-name" placeholder="タイプ名（例：リーダー型）" style={{ flex: 1, minWidth: 100, padding: "6px 10px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 13, fontFamily: S.font, background: "#FAFAF8" }} />
+                    <input id="form-inline-type-icon" placeholder="🔷" style={{ width: 44, padding: "6px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 13, fontFamily: S.font, textAlign: "center", background: "#FAFAF8" }} />
+                    <input id="form-inline-type-color" type="color" defaultValue="#888888" style={{ width: 36, height: 32, borderRadius: 8, border: `1.5px solid ${S.border}`, cursor: "pointer", padding: 2, background: "#FAFAF8" }} />
+                    <button onClick={async () => {
+                      const nameEl = document.getElementById("form-inline-type-name");
+                      const iconEl = document.getElementById("form-inline-type-icon");
+                      const colorEl = document.getElementById("form-inline-type-color");
+                      const name = nameEl?.value?.trim();
+                      if (!name) return;
+                      const newTypeId = "type_" + uid();
+                      const newType = {
+                        id: newTypeId, name, icon: iconEl?.value?.trim() || "🔷", color: colorEl?.value || "#888888", userDescription: "", adminDescription: "", creatorName: isCreatorLoggedIn ? loggedInCreatorName : "", formId: editingForm.id
+                      };
+                      await setDoc(doc(db, "types", newTypeId), newType).catch(console.error);
+                      setTypes((prev) => [...prev, { ...newType, _docId: newTypeId }]);
+                      setEditingForm((p) => ({ ...p, typeIds: [...p.typeIds, newTypeId] }));
+                      if (nameEl) nameEl.value = "";
+                      if (iconEl) iconEl.value = "";
+                      showToast(`タイプ「${name}」を追加しました`);
+                    }} style={{ padding: "6px 16px", borderRadius: 8, border: "none", background: S.accent, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#fff", fontFamily: S.font, flexShrink: 0 }}>追加</button>
+                  </div>
                 </div>
               </div>
               <div>
                 <Label>使用する質問（選択順で出題）</Label>
                 <div style={{ maxHeight: 300, overflow: "auto", border: `1px solid ${S.border}`, borderRadius: S.radiusSm }}>
-                  {questions.filter(q => !q.formId || q.formId === editingForm.id).length === 0 && <div style={{ padding: 16, fontSize: 12, color: S.textMuted, textAlign: "center" }}>質問管理から質問を追加してください</div>}
+                  {questions.filter(q => q.formId === editingForm.id || editingForm.questionIds.includes(q.id)).length === 0 && <div style={{ padding: 16, fontSize: 12, color: S.textMuted, textAlign: "center" }}>追加された質問がありません</div>}
                   {questions
-                    .filter(q => !q.formId || q.formId === editingForm.id || editingForm.questionIds.includes(q.id))
+                    .filter(q => q.formId === editingForm.id || editingForm.questionIds.includes(q.id))
                     .map((q) => {
                     const idx = editingForm.questionIds.indexOf(q.id);
                     const inc = idx !== -1;
@@ -2267,9 +2298,40 @@ export default function PersonalityDiagnosisApp() {
                         </div>
                         <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: S.text }}>{q.text}</span>
                         {inc && <span style={{ fontSize: 11, fontWeight: 700, color: S.accent, background: S.card, padding: "1px 7px", borderRadius: 4 }}>#{idx + 1}</span>}
+                        <button onClick={(e) => { e.stopPropagation(); setEditingQuestion({ ...q }); }} style={{ background: S.bg, border: `1px solid ${S.border}`, borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: S.textMuted }}>✏️編集</button>
                       </div>
                     );
                   })}
+                </div>
+
+                {/* フォーム編集内でのインライン新規質問作成 */}
+                <div style={{ marginTop: 12, padding: "12px", borderRadius: S.radiusSm, background: S.bg, border: `1px dashed ${S.border}` }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: S.textMuted, marginBottom: 8 }}>✨ 新しい質問を追加</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input id="form-inline-q-text" placeholder="質問文（例：休日の過ごし方は？）" style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 13, fontFamily: S.font, background: "#FAFAF8" }} />
+                    <button onClick={async () => {
+                      const textEl = document.getElementById("form-inline-q-text");
+                      const text = textEl?.value?.trim();
+                      if (!text) return;
+                      const newId = "q_" + uid();
+                      const formTypes = types.filter(t => t.formId === editingForm.id || editingForm.typeIds.includes(t.id));
+                      const defaultTypeId = formTypes.length > 0 ? formTypes[0].id : "";
+                      const newQ = {
+                        id: newId, text,
+                        choices: [
+                          { id: newId + "_a", label: "はい", typeId: defaultTypeId, score: 1 },
+                          { id: newId + "_b", label: "いいえ", typeId: defaultTypeId, score: 0 }
+                        ],
+                        creatorName: isCreatorLoggedIn ? loggedInCreatorName : "",
+                        formId: editingForm.id
+                      };
+                      await setDoc(doc(db, "questions", newId), newQ).catch(console.error);
+                      setQuestions(prev => [...prev, { ...newQ, _docId: newId }]);
+                      setEditingForm(p => p ? { ...p, questionIds: [...p.questionIds, newId] } : p);
+                      if (textEl) textEl.value = "";
+                      showToast("質問を追加しました（上の「✏️編集」から詳細を設定してください）");
+                    }} style={{ padding: "6px 16px", borderRadius: 8, border: "none", background: S.accent, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#fff", fontFamily: S.font, flexShrink: 0 }}>追加</button>
+                  </div>
                 </div>
               </div>
             </>
