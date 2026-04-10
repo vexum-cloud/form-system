@@ -2245,10 +2245,14 @@ export default function PersonalityDiagnosisApp() {
                     .map((t) => {
                     const inc = editingForm.typeIds.includes(t.id);
                     return (
-                      <button key={t.id} onClick={() => setEditingForm((p) => ({ ...p, typeIds: inc ? p.typeIds.filter((id) => id !== t.id) : [...p.typeIds, t.id] }))}
-                        style={{ padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, fontFamily: S.font, cursor: "pointer", border: `1.5px solid ${inc ? t.color : S.border}`, background: inc ? t.color + "18" : S.bg, color: inc ? t.color : S.textMuted, transition: "all 0.2s" }}>
-                        {t.icon} {t.name}
-                      </button>
+                      <div key={t.id} style={{ display: "flex", alignItems: "center", borderRadius: 8, border: `1.5px solid ${inc ? t.color : S.border}`, background: inc ? t.color + "18" : S.bg, overflow: "hidden" }}>
+                        <button onClick={() => setEditingForm((p) => ({ ...p, typeIds: inc ? p.typeIds.filter((id) => id !== t.id) : [...p.typeIds, t.id] }))}
+                          style={{ padding: "5px 10px", fontSize: 12, fontWeight: 600, fontFamily: S.font, cursor: "pointer", border: "none", background: "transparent", color: inc ? t.color : S.textMuted }}>
+                          {t.icon} {t.name}
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); setEditingType({ ...t }); }}
+                          style={{ padding: "5px 8px", fontSize: 12, border: "none", borderLeft: `1px solid ${inc ? t.color + "44" : S.border}`, background: "transparent", cursor: "pointer", color: inc ? t.color : S.textMuted }}>✏️</button>
+                      </div>
                     );
                   })}
                   {types.filter(t => t.formId === editingForm.id || editingForm.typeIds.includes(t.id)).length === 0 && <span style={{ fontSize: 12, color: S.textMuted }}>追加されたタイプがありません</span>}
