@@ -982,10 +982,10 @@ export default function PersonalityDiagnosisApp() {
     setEditingQuestion({
       id: newId, text: "",
       choices: [
-        { id: newId + "_a", label: "", typeId: types.filter(t => !t.formId || t.formId === adminSelectedFormId)[0]?.id || "", score: 1 },
-        { id: newId + "_b", label: "", typeId: types.filter(t => !t.formId || t.formId === adminSelectedFormId)[1]?.id || "", score: 1 },
-        { id: newId + "_c", label: "", typeId: types.filter(t => !t.formId || t.formId === adminSelectedFormId)[2]?.id || "", score: 1 },
-        { id: newId + "_d", label: "", typeId: types.filter(t => !t.formId || t.formId === adminSelectedFormId)[3]?.id || "", score: 1 },
+        { id: newId + "_a", label: "", typeId: types.filter(t => adminSelectedForm?.typeIds.includes(t.id))[0]?.id || "", score: 1 },
+        { id: newId + "_b", label: "", typeId: types.filter(t => adminSelectedForm?.typeIds.includes(t.id))[1]?.id || "", score: 1 },
+        { id: newId + "_c", label: "", typeId: types.filter(t => adminSelectedForm?.typeIds.includes(t.id))[2]?.id || "", score: 1 },
+        { id: newId + "_d", label: "", typeId: types.filter(t => adminSelectedForm?.typeIds.includes(t.id))[3]?.id || "", score: 1 },
       ],
       isNew: true,
       creatorName: isCreatorLoggedIn ? loggedInCreatorName : "",
@@ -2125,7 +2125,7 @@ export default function PersonalityDiagnosisApp() {
               <select value={c.typeId} onChange={(e) => { const nc = [...editingQuestion.choices]; nc[i] = { ...nc[i], typeId: e.target.value }; setEditingQuestion((p) => ({ ...p, choices: nc })); }}
                 style={{ padding: "8px 8px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 12, fontFamily: S.font, color: S.text, background: "#FAFAF8", maxWidth: 150 }}>
                 <option value="">タイプ</option>
-                {types.filter(t => !t.formId || t.formId === adminSelectedFormId || t.id === c.typeId).map((t) => (<option key={t.id} value={t.id}>{t.icon} {t.name}</option>))}
+                {types.filter(t => { const qFormId = editingQuestion.formId || adminSelectedFormId; const qForm = forms.find(f => f.id === qFormId); return qForm ? qForm.typeIds.includes(t.id) : false; }).map((t) => (<option key={t.id} value={t.id}>{t.icon} {t.name}</option>))}
               </select>
               <input type="number" value={c.score} onChange={(e) => { const nc = [...editingQuestion.choices]; nc[i] = { ...nc[i], score: parseInt(e.target.value) || 0 }; setEditingQuestion((p) => ({ ...p, choices: nc })); }}
                 style={{ width: 50, padding: "8px 6px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 13, fontFamily: S.font, textAlign: "center", background: "#FAFAF8" }} min="0" />
@@ -2136,7 +2136,7 @@ export default function PersonalityDiagnosisApp() {
             </div>
           ))}
           {editingQuestion.choices.length < 6 && (
-            <button onClick={() => { const newId = editingQuestion.id + "_" + uid(); setEditingQuestion((p) => ({ ...p, choices: [...p.choices, { id: newId, label: "", typeId: types[0]?.id || "", score: 1 }] })); }}
+            <button onClick={() => { const newId = editingQuestion.id + "_" + uid(); const qFormId = editingQuestion.formId || adminSelectedFormId; const qForm = forms.find(f => f.id === qFormId); const defaultTypeId = (qForm ? types.filter(t => qForm.typeIds.includes(t.id)) : [])[0]?.id || ""; setEditingQuestion((p) => ({ ...p, choices: [...p.choices, { id: newId, label: "", typeId: defaultTypeId, score: 1 }] })); }}
               style={{ fontSize: 12, color: S.accent, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: S.font, marginTop: 4 }}>+ 選択肢を追加</button>
           )}
 
