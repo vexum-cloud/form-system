@@ -2250,7 +2250,7 @@ export default function PersonalityDiagnosisApp() {
                           style={{ padding: "5px 10px", fontSize: 12, fontWeight: 600, fontFamily: S.font, cursor: "pointer", border: "none", background: "transparent", color: inc ? t.color : S.textMuted }}>
                           {t.icon} {t.name}
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); setEditingType({ ...t }); }}
+                        <button onClick={(e) => { e.stopPropagation(); setEditingType({ ...t, formId: t.formId || editingForm.id }); }}
                           style={{ padding: "5px 8px", fontSize: 12, border: "none", borderLeft: `1px solid ${inc ? t.color + "44" : S.border}`, background: "transparent", cursor: "pointer", color: inc ? t.color : S.textMuted }}>✏️</button>
                       </div>
                     );
