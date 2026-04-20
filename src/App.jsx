@@ -1981,27 +1981,6 @@ export default function PersonalityDiagnosisApp() {
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 900, color: S.text, marginBottom: 20 }}>設定</h2>
 
-            {/* 全フォーム表示設定 */}
-            <div style={{ background: S.card, borderRadius: S.radius, padding: "24px", boxShadow: S.shadow, border: `1px solid ${S.border}`, marginBottom: 20 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 900, color: S.text, marginBottom: 16 }}>フォーム別 結果表示設定</h3>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {forms.map((f) => (
-                  <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: S.radiusSm, background: S.bg }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: S.text }}>{f.name}</div>
-                      <div style={{ fontSize: 12, color: S.textMuted }}>{f.questionIds.length}問・{f.typeIds.length}タイプ</div>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-                      <Toggle on={f.showResultToRespondent} onToggle={() => toggleShowResult(f.id)} label={f.showResultToRespondent ? "全体結果を表示" : "全体結果を非表示"} />
-                      {f.showResultToRespondent && (
-                        <Toggle on={f.showScoreDetails ?? true} onToggle={() => toggleShowScoreDetails(f.id)} label={(f.showScoreDetails ?? true) ? "内訳を表示" : "内訳を非表示"} />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* パスワード変更 */}
             <div style={{ background: S.card, borderRadius: S.radius, padding: "24px", boxShadow: S.shadow, border: `1px solid ${S.border}` }}>
               <h3 style={{ fontSize: 16, fontWeight: 900, color: S.text, marginBottom: 16 }}>管理者パスワード変更</h3>
