@@ -764,6 +764,15 @@ export default function PersonalityDiagnosisApp() {
     }
   }, [isCreatorLoggedIn, loggedInCreatorName, fetchTypes, fetchQuestions]);
 
+  // サブ管理者の選択中フォームが自分のものでない場合は自分のフォームに切替
+  useEffect(() => {
+    if (!isCreatorLoggedIn || !loggedInCreatorName) return;
+    const myForms = forms.filter((f) => f.creatorName === loggedInCreatorName);
+    if (myForms.length === 0) return;
+    const isMine = myForms.some((f) => f.id === adminSelectedFormId);
+    if (!isMine) setAdminSelectedFormId(myForms[0].id);
+  }, [isCreatorLoggedIn, loggedInCreatorName, forms, adminSelectedFormId]);
+
   // --- トースト ---
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -942,6 +951,13 @@ export default function PersonalityDiagnosisApp() {
   // --- フィルタリングされた回答一覧 ---
   const filteredResponses = useMemo(() => {
     let list = [...responses];
+    // サブ管理者ログイン時は自分が作ったフォームの回答のみに限定
+    if (isCreatorLoggedIn && loggedInCreatorName) {
+      const myFormIds = new Set(
+        forms.filter((f) => f.creatorName === loggedInCreatorName).map((f) => f.id)
+      );
+      list = list.filter((r) => myFormIds.has(r.formId));
+    }
     if (responseFilter.formId !== "all") {
       list = list.filter((r) => r.formId === responseFilter.formId);
     }
@@ -961,7 +977,7 @@ export default function PersonalityDiagnosisApp() {
     }
     list.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
     return list;
-  }, [responses, responseFilter]);
+  }, [responses, responseFilter, isCreatorLoggedIn, loggedInCreatorName, forms]);
 
   // --- 回答サマリー（現在選択中のフォームに限定） ---
   const responseSummary = useMemo(() => {
@@ -1006,9 +1022,13 @@ export default function PersonalityDiagnosisApp() {
     if (targetCreator && creatorLoginPassInput === targetCreator.password) {
       setIsCreatorLoggedIn(true);
       setIsAdminLoggedIn(false);
-      setLoggedInCreatorName(creatorLoginNameInput.trim());
+      const cname = creatorLoginNameInput.trim();
+      setLoggedInCreatorName(cname);
       setMode("admin");
       setAdminTab("forms");
+      // 自分のフォームの先頭を選択
+      const myFirstForm = forms.find((f) => f.creatorName === cname);
+      if (myFirstForm) setAdminSelectedFormId(myFirstForm.id);
       setCreatorLoginError(false);
       setCreatorLoginPassInput("");
       // URLから名前が渡された場合のために名前はクリアしないでおく
@@ -1581,7 +1601,7 @@ export default function PersonalityDiagnosisApp() {
     { key: "forms", label: "フォーム管理", icon: "📋" },
     { key: "settings", label: "設定", icon: "⚙️" },
   ];
-  const adminTabs = isCreatorLoggedIn ? adminTabsAll.filter((t) => ["questions", "types", "forms"].includes(t.key)) : adminTabsAll;
+  const adminTabs = isCreatorLoggedIn ? adminTabsAll.filter((t) => ["responses", "questions", "types", "forms"].includes(t.key)) : adminTabsAll;
 
   const visibleForms = isCreatorLoggedIn ? forms.filter((f) => f.creatorName === loggedInCreatorName) : forms;
 
