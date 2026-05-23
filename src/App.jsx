@@ -260,6 +260,17 @@ const QUESTIONS_HR = [
 const ALL_TYPES = [...TYPES_STANDARD, ...TYPES_KIDS, ...TYPES_HR];
 const ALL_QUESTIONS = [...QUESTIONS_STANDARD, ...QUESTIONS_KIDS, ...QUESTIONS_HR];
 
+// --- 回答者情報フィールドのデフォルト設定 ---
+// 組み込み4フィールド: 回答日 / 所属部署 / 氏名 / メール
+// key は respondentInfo のキーとして使われる（既存データ互換のため固定）
+const DEFAULT_RESPONDENT_FIELDS = [
+  { id: "field_date",       key: "date",       label: "回答日",         type: "date",  enabled: true,  required: false, builtin: true, placeholder: "" },
+  { id: "field_department", key: "department", label: "所属部署",       type: "text",  enabled: true,  required: false, builtin: true, placeholder: "例：営業部" },
+  { id: "field_name",       key: "name",       label: "氏名",           type: "text",  enabled: true,  required: true,  builtin: true, placeholder: "例：田中 太郎" },
+  { id: "field_email",      key: "email",      label: "メールアドレス", type: "email", enabled: true,  required: false, builtin: true, placeholder: "例：tanaka@example.com" },
+];
+const cloneDefaultFields = () => DEFAULT_RESPONDENT_FIELDS.map((f) => ({ ...f }));
+
 // --- 初期フォーム3種 ---
 const INITIAL_FORMS = [
   {
@@ -271,6 +282,7 @@ const INITIAL_FORMS = [
     typeIds: TYPES_STANDARD.map((t) => t.id),
     showResultToRespondent: true,
     showScoreDetails: true,
+    fields: cloneDefaultFields(),
     createdAt: Date.now() - 86400000 * 7,
   },
   {
@@ -282,6 +294,7 @@ const INITIAL_FORMS = [
     typeIds: TYPES_KIDS.map((t) => t.id),
     showResultToRespondent: true,
     showScoreDetails: true,
+    fields: cloneDefaultFields(),
     createdAt: Date.now() - 86400000 * 3,
   },
   {
@@ -293,6 +306,7 @@ const INITIAL_FORMS = [
     typeIds: TYPES_HR.map((t) => t.id),
     showResultToRespondent: false,
     showScoreDetails: false,
+    fields: cloneDefaultFields(),
     createdAt: Date.now() - 86400000 * 1,
   },
 ];
@@ -605,6 +619,8 @@ export default function PersonalityDiagnosisApp() {
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [editingType, setEditingType] = useState(null);
   const [editingForm, setEditingForm] = useState(null);
+  const [previewingForm, setPreviewingForm] = useState(null);
+  const [previewValues, setPreviewValues] = useState({});
   const [toast, setToast] = useState(null);
 
   // --- 回答一覧フィルター ---
@@ -787,16 +803,22 @@ export default function PersonalityDiagnosisApp() {
     setAnswers({});
     setSelectedChoice(null);
     setSessionStep("info");
-    setRespondentInfo({
+    const targetForm = forms.find((ff) => ff.id === formId);
+    const fieldList = getActiveFields(targetForm);
+    const initialInfo = {
       date: new Date().toISOString().slice(0, 10),
       department: "",
       name: "",
       email: "",
+    };
+    // カスタム項目の初期値（id をキーとして空文字）
+    fieldList.forEach((f) => {
+      if (!f.builtin) initialInfo[f.id] = "";
     });
+    setRespondentInfo(initialInfo);
     setMode("user");
     if (!skipNav) {
-      const f = forms.find((ff) => ff.id === formId);
-      if (f && f.slug) navigate("/" + f.slug);
+      if (targetForm && targetForm.slug) navigate("/" + targetForm.slug);
     }
   };
 
@@ -831,8 +853,26 @@ export default function PersonalityDiagnosisApp() {
     }
   }, [location.pathname, isAdminLoggedIn, isCreatorLoggedIn, forms, formsLoaded]);
 
+  // --- 回答者情報の有効フィールド取得 ---
+  const getActiveFields = (form) => {
+    if (!form) return cloneDefaultFields();
+    if (Array.isArray(form.fields) && form.fields.length > 0) return form.fields;
+    return cloneDefaultFields();
+  };
+  // 必須フィールドがすべて埋まっているか
+  const isRespondentInfoValid = (form, info) => {
+    const fields = getActiveFields(form);
+    return fields.every((f) => {
+      if (!f.enabled || !f.required) return true;
+      const key = f.builtin ? f.key : f.id;
+      const v = info?.[key];
+      return v !== undefined && v !== null && String(v).trim() !== "";
+    });
+  };
+
   // --- 回答者情報入力後 → 質問開始 ---
   const startQuestions = () => {
+    if (!isRespondentInfoValid(activeForm, respondentInfo)) return;
     setSessionStep("questions");
     setCurrentQ(0);
   };
@@ -923,14 +963,24 @@ export default function PersonalityDiagnosisApp() {
     return list;
   }, [responses, responseFilter]);
 
-  // --- 回答サマリー ---
+  // --- 回答サマリー（現在選択中のフォームに限定） ---
   const responseSummary = useMemo(() => {
+    // 選択中フォームの回答のみを集計対象にする
+    const scoped = filteredResponses.filter((r) => r.formId === adminSelectedFormId);
+    // このフォームに紐づくタイプのみを許可（他フォーム由来の結果が混ざらないようにする）
+    const form = forms.find((f) => f.id === adminSelectedFormId);
+    const allowedTypeIds = new Set(
+      form && Array.isArray(form.typeIds) && form.typeIds.length > 0
+        ? form.typeIds
+        : types.filter((t) => !t.formId || t.formId === adminSelectedFormId).map((t) => t.id)
+    );
+    const onlyFormResponses = scoped.filter((r) => allowedTypeIds.has(r.resultTypeId));
     const typeCounts = {};
-    filteredResponses.forEach((r) => {
+    onlyFormResponses.forEach((r) => {
       typeCounts[r.resultTypeLabel] = (typeCounts[r.resultTypeLabel] || 0) + 1;
     });
-    return { total: filteredResponses.length, typeCounts };
-  }, [filteredResponses]);
+    return { total: onlyFormResponses.length, typeCounts };
+  }, [filteredResponses, adminSelectedFormId, forms, types]);
 
   // --- 管理者ハンドラ ---
   const handleAdminLogin = () => {
@@ -1087,7 +1137,7 @@ export default function PersonalityDiagnosisApp() {
   // フォームCRUD
   const addForm = () => {
     const newId = "form_" + uid();
-    setEditingForm({ id: newId, slug: newId, name: "", description: "", questionIds: [], typeIds: [], showResultToRespondent: true, showScoreDetails: true, createdAt: Date.now(), isNew: true, creatorName: isCreatorLoggedIn ? loggedInCreatorName : "" });
+    setEditingForm({ id: newId, slug: newId, name: "", description: "", questionIds: [], typeIds: [], showResultToRespondent: true, showScoreDetails: true, fields: cloneDefaultFields(), createdAt: Date.now(), isNew: true, creatorName: isCreatorLoggedIn ? loggedInCreatorName : "" });
   };
   const saveForm = async () => {
     if (!editingForm || !editingForm.name.trim()) return;
@@ -1371,27 +1421,37 @@ export default function PersonalityDiagnosisApp() {
             <div style={{ padding: "16px 0 0", borderTop: `1px solid ${S.border}` }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: S.text, marginBottom: 16 }}>回答者情報を入力してください</div>
 
-              <div style={{ marginBottom: 14 }}>
-                <Label>回答日</Label>
-                <Input type="date" value={respondentInfo.date} onChange={(v) => setRespondentInfo((p) => ({ ...p, date: v }))} />
-              </div>
-              <div style={{ marginBottom: 14 }}>
-                <Label>所属部署</Label>
-                <Input value={respondentInfo.department} onChange={(v) => setRespondentInfo((p) => ({ ...p, department: v }))} placeholder="例：営業部" />
-              </div>
-              <div style={{ marginBottom: 14 }}>
-                <Label>氏名 <span style={{ color: S.danger, fontSize: 11 }}>*必須</span></Label>
-                <Input value={respondentInfo.name} onChange={(v) => setRespondentInfo((p) => ({ ...p, name: v }))} placeholder="例：田中 太郎" />
-              </div>
-              <div style={{ marginBottom: 24 }}>
-                <Label>メールアドレス（任意）</Label>
-                <Input type="email" value={respondentInfo.email} onChange={(v) => setRespondentInfo((p) => ({ ...p, email: v }))} placeholder="例：tanaka@example.com" />
-              </div>
+              {getActiveFields(activeForm)
+                .filter((f) => f.enabled)
+                .map((f, idx, arr) => {
+                  const key = f.builtin ? f.key : f.id;
+                  const isLast = idx === arr.length - 1;
+                  return (
+                    <div key={f.id} style={{ marginBottom: isLast ? 24 : 14 }}>
+                      <Label>
+                        {f.label}
+                        {f.required
+                          ? <span style={{ color: S.danger, fontSize: 11 }}> *必須</span>
+                          : <span style={{ color: S.textMuted, fontSize: 11 }}>（任意）</span>}
+                      </Label>
+                      {f.type === "textarea" ? (
+                        <TextArea value={respondentInfo[key] || ""} onChange={(v) => setRespondentInfo((p) => ({ ...p, [key]: v }))} placeholder={f.placeholder || ""} rows={3} />
+                      ) : (
+                        <Input type={f.type || "text"} value={respondentInfo[key] || ""} onChange={(v) => setRespondentInfo((p) => ({ ...p, [key]: v }))} placeholder={f.placeholder || ""} />
+                      )}
+                    </div>
+                  );
+                })}
 
-              <button onClick={startQuestions} disabled={!respondentInfo.name.trim()}
-                style={{ width: "100%", padding: "14px", borderRadius: S.radiusSm, border: "none", background: respondentInfo.name.trim() ? S.accent : "#D5CFC8", cursor: respondentInfo.name.trim() ? "pointer" : "not-allowed", fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: S.font, transition: "all 0.2s", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                次へ → 診断開始 <Icon name="chevronRight" size={16} />
-              </button>
+              {(() => {
+                const ok = isRespondentInfoValid(activeForm, respondentInfo);
+                return (
+                  <button onClick={startQuestions} disabled={!ok}
+                    style={{ width: "100%", padding: "14px", borderRadius: S.radiusSm, border: "none", background: ok ? S.accent : "#D5CFC8", cursor: ok ? "pointer" : "not-allowed", fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: S.font, transition: "all 0.2s", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    次へ → 診断開始 <Icon name="chevronRight" size={16} />
+                  </button>
+                );
+              })()}
               <button onClick={() => { setMode("landing"); navigate("/"); }}
                 style={{ width: "100%", padding: "10px", borderRadius: S.radiusSm, border: "none", background: "transparent", cursor: "pointer", fontSize: 13, color: S.textMuted, fontFamily: S.font, marginTop: 8 }}>
                 キャンセル
@@ -1916,7 +1976,7 @@ export default function PersonalityDiagnosisApp() {
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => duplicateForm(f)} style={{ background: S.bg, border: "none", borderRadius: 8, padding: 8, cursor: "pointer", color: S.textMuted }} title="複製"><Icon name="copy" size={15} /></button>
-                        <button onClick={() => setEditingForm({ ...f })} style={{ background: S.bg, border: "none", borderRadius: 8, padding: 8, cursor: "pointer", fontSize: 15 }} title="編集">✏️</button>
+                        <button onClick={() => setEditingForm({ ...f, fields: (f.fields && f.fields.length) ? f.fields.map((x) => ({ ...x })) : cloneDefaultFields() })} style={{ background: S.bg, border: "none", borderRadius: 8, padding: 8, cursor: "pointer", fontSize: 15 }} title="編集">✏️</button>
                         <button onClick={() => deleteForm(f.id)} style={{ background: S.dangerLight, border: "none", borderRadius: 8, padding: 8, cursor: "pointer", color: S.danger }}><Icon name="trash" size={15} /></button>
                       </div>
                     </div>
@@ -2210,6 +2270,78 @@ export default function PersonalityDiagnosisApp() {
               <Toggle on={editingForm.showScoreDetails ?? true} onToggle={() => setEditingForm((p) => ({ ...p, showScoreDetails: !(p.showScoreDetails ?? true) }))} label={(editingForm.showScoreDetails ?? true) ? "内訳を表示する" : "内訳を表示しない"} />
             </div>
           )}
+
+          {/* ====== 回答者情報の入力項目設定 ====== */}
+          <div style={{ marginBottom: 14, paddingTop: 14, borderTop: `1px dashed ${S.border}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <Label>回答者情報の入力項目</Label>
+              <button onClick={() => { setPreviewingForm(editingForm); setPreviewValues({}); }}
+                style={{ padding: "6px 12px", borderRadius: 6, border: `1.5px solid ${S.accent}`, background: S.card, color: S.accent, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: S.font }}>
+                👁️ プレビュー
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: S.textMuted, marginBottom: 10, lineHeight: 1.6 }}>
+              表示/非表示・必須/任意を切替できます。組み込み項目（氏名・所属など）は削除できませんが非表示にできます。
+            </div>
+            <div style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, overflow: "hidden" }}>
+              {(editingForm.fields || []).map((f, idx) => (
+                <div key={f.id} style={{ padding: "10px 12px", borderBottom: idx === (editingForm.fields.length - 1) ? "none" : `1px solid ${S.border}`, background: f.enabled ? S.card : "#F0EDE9" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    {/* 並び替え */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      <button disabled={idx === 0} onClick={() => setEditingForm((p) => {
+                        const arr = [...p.fields]; [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]; return { ...p, fields: arr };
+                      })} style={{ background: "none", border: "none", cursor: idx === 0 ? "not-allowed" : "pointer", fontSize: 10, color: idx === 0 ? S.border : S.textMuted, padding: 0 }}>▲</button>
+                      <button disabled={idx === editingForm.fields.length - 1} onClick={() => setEditingForm((p) => {
+                        const arr = [...p.fields]; [arr[idx + 1], arr[idx]] = [arr[idx], arr[idx + 1]]; return { ...p, fields: arr };
+                      })} style={{ background: "none", border: "none", cursor: idx === editingForm.fields.length - 1 ? "not-allowed" : "pointer", fontSize: 10, color: idx === editingForm.fields.length - 1 ? S.border : S.textMuted, padding: 0 }}>▼</button>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      {f.builtin ? (
+                        <div style={{ fontSize: 13, fontWeight: 700, color: S.text }}>
+                          {f.label} <span style={{ fontSize: 10, fontWeight: 600, color: S.textMuted, marginLeft: 4 }}>組み込み</span>
+                        </div>
+                      ) : (
+                        <Input value={f.label} onChange={(v) => setEditingForm((p) => ({ ...p, fields: p.fields.map((x) => x.id === f.id ? { ...x, label: v } : x) }))} placeholder="項目名" />
+                      )}
+                    </div>
+                    {!f.builtin && (
+                      <button onClick={() => setEditingForm((p) => ({ ...p, fields: p.fields.filter((x) => x.id !== f.id) }))}
+                        style={{ background: S.dangerLight, border: `1px solid ${S.danger}`, borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: S.danger, fontSize: 11, fontWeight: 700 }}>削除</button>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", paddingLeft: 24 }}>
+                    <Toggle on={f.enabled} onToggle={() => setEditingForm((p) => ({ ...p, fields: p.fields.map((x) => x.id === f.id ? { ...x, enabled: !x.enabled } : x) }))} label={f.enabled ? "表示" : "非表示"} />
+                    <Toggle on={!!f.required} onToggle={() => setEditingForm((p) => ({ ...p, fields: p.fields.map((x) => x.id === f.id ? { ...x, required: !x.required } : x) }))} label={f.required ? "必須" : "任意"} />
+                    {!f.builtin && (
+                      <select value={f.type} onChange={(e) => setEditingForm((p) => ({ ...p, fields: p.fields.map((x) => x.id === f.id ? { ...x, type: e.target.value } : x) }))}
+                        style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: `1px solid ${S.border}`, background: S.card, color: S.text, fontFamily: S.font }}>
+                        <option value="text">テキスト</option>
+                        <option value="textarea">複数行テキスト</option>
+                        <option value="email">メール</option>
+                        <option value="date">日付</option>
+                        <option value="tel">電話番号</option>
+                        <option value="number">数値</option>
+                      </select>
+                    )}
+                  </div>
+                  {!f.builtin && (
+                    <div style={{ paddingLeft: 24, marginTop: 8 }}>
+                      <Input value={f.placeholder || ""} onChange={(v) => setEditingForm((p) => ({ ...p, fields: p.fields.map((x) => x.id === f.id ? { ...x, placeholder: v } : x) }))} placeholder="プレースホルダ（例：◯◯を入力してください）" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setEditingForm((p) => ({
+              ...p,
+              fields: [...(p.fields || []), { id: "fld_" + uid(), key: "", label: "新しい項目", type: "text", enabled: true, required: false, builtin: false, placeholder: "" }]
+            }))}
+              style={{ marginTop: 10, padding: "8px 14px", borderRadius: 8, border: `1.5px dashed ${S.accent}`, background: "transparent", color: S.accent, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: S.font }}>
+              ＋ オリジナル項目を追加
+            </button>
+          </div>
+
           {editingForm.isNew ? (
             <div style={{ padding: "16px", borderRadius: S.radiusSm, background: S.bg, border: `1px dashed ${S.border}`, fontSize: 13, color: S.textMuted, lineHeight: 1.7, textAlign: "center" }}>
               💡 フォームを保存後、一覧の「編集」ボタンからタイプと質問を追加できます
@@ -2319,6 +2451,51 @@ export default function PersonalityDiagnosisApp() {
               </div>
             </>
           )}
+        </Modal>
+      )}
+
+      {/* ====== 入力フォームのプレビュー ====== */}
+      {previewingForm && (
+        <Modal title="入力画面プレビュー" onClose={() => setPreviewingForm(null)} width={520}>
+          <div style={{ fontSize: 12, color: S.textMuted, marginBottom: 12, lineHeight: 1.6 }}>
+            実際の回答者画面と同じ表示です。動作確認用なので送信はされません。
+          </div>
+          <div style={{ background: `linear-gradient(160deg, #F5F0EB 0%, #EDE6DD 100%)`, padding: 16, borderRadius: 16 }}>
+            <div style={{ background: S.card, borderRadius: 16, padding: 24, border: `1px solid ${S.border}` }}>
+              <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <div style={{ fontSize: 28, marginBottom: 4 }}>📝</div>
+                <h2 style={{ fontSize: 16, fontWeight: 900, color: S.text, marginBottom: 4 }}>{previewingForm.name || "（フォーム名）"}</h2>
+                <p style={{ fontSize: 11, color: S.textMuted, lineHeight: 1.6 }}>{previewingForm.description}</p>
+              </div>
+              <div style={{ padding: "12px 0 0", borderTop: `1px solid ${S.border}` }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: S.text, marginBottom: 12 }}>回答者情報を入力してください</div>
+                {(previewingForm.fields || []).filter((f) => f.enabled).map((f) => {
+                  const key = f.builtin ? f.key : f.id;
+                  return (
+                    <div key={f.id} style={{ marginBottom: 12 }}>
+                      <Label>
+                        {f.label}
+                        {f.required
+                          ? <span style={{ color: S.danger, fontSize: 11 }}> *必須</span>
+                          : <span style={{ color: S.textMuted, fontSize: 11 }}>（任意）</span>}
+                      </Label>
+                      {f.type === "textarea" ? (
+                        <TextArea value={previewValues[key] || ""} onChange={(v) => setPreviewValues((p) => ({ ...p, [key]: v }))} placeholder={f.placeholder || ""} rows={2} />
+                      ) : (
+                        <Input type={f.type || "text"} value={previewValues[key] || ""} onChange={(v) => setPreviewValues((p) => ({ ...p, [key]: v }))} placeholder={f.placeholder || ""} />
+                      )}
+                    </div>
+                  );
+                })}
+                {(previewingForm.fields || []).filter((f) => f.enabled).length === 0 && (
+                  <div style={{ padding: 16, textAlign: "center", fontSize: 12, color: S.textMuted }}>表示する項目がありません</div>
+                )}
+                <button disabled style={{ width: "100%", padding: "12px", borderRadius: S.radiusSm, border: "none", background: S.accent, color: "#fff", fontSize: 14, fontWeight: 700, fontFamily: S.font, marginTop: 8, opacity: 0.85 }}>
+                  次へ → 診断開始
+                </button>
+              </div>
+            </div>
+          </div>
         </Modal>
       )}
 
