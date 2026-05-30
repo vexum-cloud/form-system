@@ -1051,6 +1051,7 @@ export default function PersonalityDiagnosisApp() {
     const newId = "q_" + uid();
     setEditingQuestion({
       id: newId, text: "",
+      intent: "",
       choices: [
         { id: newId + "_a", label: "", typeId: types.filter(t => adminSelectedForm?.typeIds.includes(t.id))[0]?.id || "", score: 1 },
         { id: newId + "_b", label: "", typeId: types.filter(t => adminSelectedForm?.typeIds.includes(t.id))[1]?.id || "", score: 1 },
@@ -1907,6 +1908,11 @@ export default function PersonalityDiagnosisApp() {
                             <span style={{ fontSize: 11, fontWeight: 700, color: S.accent, background: S.accentLight, padding: "2px 8px", borderRadius: 6 }}>Q{qi + 1}</span>
                             <span style={{ fontSize: 14, fontWeight: 700, color: S.text }}>{q.text}</span>
                           </div>
+                          {q.intent && (
+                            <div style={{ marginBottom: 8, padding: "8px 10px", borderRadius: 6, background: "#FFF8E7", borderLeft: `3px solid #E0A040`, fontSize: 12, color: "#7A5A20", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                              <span style={{ fontWeight: 700, marginRight: 4 }}>💡 質問の意図:</span>{q.intent}
+                            </div>
+                          )}
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                             {q.choices.map((c) => {
                               const t = types.find((tp) => tp.id === c.typeId);
@@ -2174,6 +2180,18 @@ export default function PersonalityDiagnosisApp() {
           <div style={{ marginBottom: 16 }}>
             <Label>質問文</Label>
             <Input value={editingQuestion.text} onChange={(v) => setEditingQuestion((p) => ({ ...p, text: v }))} placeholder="例：休日、急に予定が空いたら？" />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <Label>
+              質問の意図
+              <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: S.textMuted }}>（管理者のみ閲覧・回答者には表示されません）</span>
+            </Label>
+            <TextArea
+              value={editingQuestion.intent || ""}
+              onChange={(v) => setEditingQuestion((p) => ({ ...p, intent: v }))}
+              placeholder="例：休日の行動パターンから外向性・社交性を測定したい。Aは社交型、Bは内省型、Cは行動型、Dは安定型。"
+              rows={3}
+            />
           </div>
           <Label>選択肢とスコア</Label>
           {editingQuestion.choices.map((c, i) => (
