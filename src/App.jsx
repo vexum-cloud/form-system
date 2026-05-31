@@ -1034,7 +1034,13 @@ export default function PersonalityDiagnosisApp() {
       try { await deleteDoc(doc(db, "questions", target._docId || id)); } catch (e) { console.error(e); }
     }
     setQuestions((prev) => prev.filter((q) => q.id !== id));
-    setForms((prev) => prev.map((f) => ({ ...f, questionIds: f.questionIds.filter((qid) => qid !== id) })));
+    setForms((prev) => prev.map((f) => {
+      if (!f.questionIds.includes(id)) return f;
+      const updated = { ...f, questionIds: f.questionIds.filter((qid) => qid !== id) };
+      const { _docId, ...toSave } = updated;
+      setDoc(doc(db, "forms", f.id), toSave).catch(console.error);
+      return updated;
+    }));
     showToast("質問を削除しました");
   };
 
@@ -1080,7 +1086,13 @@ export default function PersonalityDiagnosisApp() {
       try { await deleteDoc(doc(db, "types", target._docId || id)); } catch (e) { console.error(e); }
     }
     setTypes((prev) => prev.filter((t) => t.id !== id));
-    setForms((prev) => prev.map((f) => ({ ...f, typeIds: f.typeIds.filter((tid) => tid !== id) })));
+    setForms((prev) => prev.map((f) => {
+      if (!f.typeIds.includes(id)) return f;
+      const updated = { ...f, typeIds: f.typeIds.filter((tid) => tid !== id) };
+      const { _docId, ...toSave } = updated;
+      setDoc(doc(db, "forms", f.id), toSave).catch(console.error);
+      return updated;
+    }));
     showToast("タイプを削除しました");
   };
 
@@ -1176,27 +1188,97 @@ export default function PersonalityDiagnosisApp() {
     }
   };
   const duplicateForm = async (f) => {
-    const newId = "form_" + uid();
+    const newFormId = "form_" + uid();
     const newSlug = (f.slug || f.id) + "_copy";
-    const { _docId, ...rest } = f;
-    const newF = { ...rest, id: newId, slug: newSlug, name: f.name + "（コピー）", createdAt: Date.now() };
+
+    // 質問を全件ディープコピー（新IDで別ドキュメント作成）
+    const newQuestionIds = [];
+    const newQuestionDocs = [];
+    for (const qId of f.questionIds) {
+      const origQ = questions.find((q) => q.id === qId);
+      if (!origQ) continue;
+      const newQId = "q_" + uid();
+      const { _docId, ...qData } = origQ;
+      const newQ = {
+        ...qData,
+        id: newQId,
+        formId: newFormId,
+        choices: origQ.choices.map((c, i) => ({
+          ...c,
+          id: newQId + "_" + ["a","b","c","d","e","f","g","h"][i] || newQId + "_" + i,
+        })),
+      };
+      newQuestionIds.push(newQId);
+      newQuestionDocs.push(newQ);
+    }
+
+    // タイプを全件ディープコピー（新IDで別ドキュメント作成）
+    const newTypeIds = [];
+    const newTypeDocs = [];
+    const typeIdMap = {}; // 旧typeId → 新typeId のマッピング
+    for (const tId of f.typeIds) {
+      const origT = types.find((t) => t.id === tId);
+      if (!origT) continue;
+      const newTId = "type_" + uid();
+      typeIdMap[tId] = newTId;
+      const { _docId, ...tData } = origT;
+      const newT = { ...tData, id: newTId, formId: newFormId };
+      newTypeIds.push(newTId);
+      newTypeDocs.push(newT);
+    }
+
+    // 質問内の typeId も新しい typeId に更新
+    for (const q of newQuestionDocs) {
+      q.choices = q.choices.map((c) => ({
+        ...c,
+        typeId: typeIdMap[c.typeId] || c.typeId,
+      }));
+    }
+
+    // Firestore に一括書き込み
     try {
-      await setDoc(doc(db, "forms", newId), newF);
+      await Promise.all([
+        ...newQuestionDocs.map((q) => setDoc(doc(db, "questions", q.id), q)),
+        ...newTypeDocs.map((t) => setDoc(doc(db, "types", t.id), t)),
+      ]);
+    } catch (e) {
+      console.error("フォーム複製エラー（質問/タイプ）:", e);
+    }
+
+    const { _docId, ...rest } = f;
+    const newF = { ...rest, id: newFormId, slug: newSlug, name: f.name + "（コピー）", questionIds: newQuestionIds, typeIds: newTypeIds, createdAt: Date.now() };
+    try {
+      await setDoc(doc(db, "forms", newFormId), newF);
     } catch (e) {
       console.error("フォーム複製エラー:", e);
     }
+
+    setQuestions((prev) => [...prev, ...newQuestionDocs.map((q) => ({ ...q, _docId: q.id }))]);
+    setTypes((prev) => [...prev, ...newTypeDocs.map((t) => ({ ...t, _docId: t.id }))]);
     setForms((prev) => [...prev, newF]);
-    showToast("フォームを複製しました");
+    showToast("フォームを複製しました（質問・タイプも独立してコピーされました）");
   };
 
   // 結果表示トグル
   const toggleShowResult = (formId) => {
-    setForms((prev) => prev.map((f) => f.id === formId ? { ...f, showResultToRespondent: !f.showResultToRespondent } : f));
+    setForms((prev) => prev.map((f) => {
+      if (f.id !== formId) return f;
+      const updated = { ...f, showResultToRespondent: !f.showResultToRespondent };
+      const { _docId, ...toSave } = updated;
+      setDoc(doc(db, "forms", f.id), toSave).catch(console.error);
+      return updated;
+    }));
   };
 
   // スコア内訳表示トグル
   const toggleShowScoreDetails = (formId) => {
-    setForms((prev) => prev.map((f) => f.id === formId ? { ...f, showScoreDetails: !(f.showScoreDetails ?? true) } : f));
+    setForms((prev) => prev.map((f) => {
+      if (f.id !== formId) return f;
+      const updated = { ...f, showScoreDetails: !(f.showScoreDetails ?? true) };
+      const { _docId, ...toSave } = updated;
+      setDoc(doc(db, "forms", f.id), toSave).catch(console.error);
+      return updated;
+    }));
   };
 
   // 回答削除（Firestore連携）
