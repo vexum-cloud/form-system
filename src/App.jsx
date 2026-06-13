@@ -2709,12 +2709,20 @@ export default function PersonalityDiagnosisApp() {
                     <tbody>
                       {labelEntries.map(([qId, info], idx) => {
                         const matchType = types.find((tp) => tp.name === info.typeLabel);
+                        const qIntent = questions.find((q) => q.id === qId)?.intent;
                         return (
                           <tr key={qId} style={{ borderBottom: `1px solid ${S.border}` }}>
-                            <td style={{ padding: "8px 10px", fontWeight: 700, color: S.accent }}>{idx + 1}</td>
-                            <td style={{ padding: "8px 10px", color: S.text }}>{info.questionText}</td>
-                            <td style={{ padding: "8px 10px", fontWeight: 600, color: S.text }}>{info.choiceLabel}</td>
-                            <td style={{ padding: "8px 10px" }}>
+                            <td style={{ padding: "8px 10px", fontWeight: 700, color: S.accent, verticalAlign: "top" }}>{idx + 1}</td>
+                            <td style={{ padding: "8px 10px", color: S.text, verticalAlign: "top" }}>
+                              {info.questionText}
+                              {qIntent && (
+                                <div style={{ marginTop: 5, fontSize: 11, color: "#9A7B0A", background: "#FFF8E1", border: "1px solid #F0E0A0", borderRadius: 4, padding: "3px 7px" }}>
+                                  💡 質問の意図: {qIntent}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: "8px 10px", fontWeight: 600, color: S.text, verticalAlign: "top" }}>{info.choiceLabel}</td>
+                            <td style={{ padding: "8px 10px", verticalAlign: "top" }}>
                               <span style={{ padding: "2px 8px", borderRadius: 4, background: (matchType?.color || "#888") + "14", color: matchType?.color || "#888", fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>{info.typeLabel}</span>
                             </td>
                           </tr>
@@ -2723,6 +2731,16 @@ export default function PersonalityDiagnosisApp() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* 一般公開用（回答者に表示される）分析結果 */}
+                {t && t.userDescription && (
+                  <div style={{ background: (t.color || "#888") + "0C", borderRadius: S.radiusSm, padding: "16px", border: `1px solid ${(t.color || "#888")}25`, marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: t.color || S.text, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 15 }}>{t.icon}</span> 一般公開用の分析結果（回答者に表示される内容）
+                    </div>
+                    <div style={{ fontSize: 13, lineHeight: 1.8, color: S.text, whiteSpace: "pre-line" }}>{t.userDescription}</div>
+                  </div>
+                )}
 
                 {/* 管理者向けタイプ説明 */}
                 {t && (
