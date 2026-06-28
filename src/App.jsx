@@ -519,6 +519,49 @@ const Toggle = ({ on, onToggle, label }) => (
     {label && <span style={{ fontSize: 13, fontWeight: 600, color: on ? S.accent : S.textMuted }}>{label}</span>}
   </div>
 );
+// 画像URLピッカー（サムネイルをクリックしてURLを設定）
+const ImagePicker = ({ value, onChange, label, hint, size = 96 }) => {
+  const [editing, setEditing] = useState(false);
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {label && <Label>{label}</Label>}
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <div
+          onClick={() => setEditing(true)}
+          title="クリックして画像を設定"
+          style={{
+            width: size, height: size, borderRadius: 12, flexShrink: 0, cursor: "pointer",
+            border: `1.5px dashed ${S.border}`, background: value ? `#fff url("${value}") center/cover no-repeat` : S.bg,
+            display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative",
+          }}>
+          {!value && <span style={{ fontSize: 24, color: S.textMuted }}>🖼️</span>}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {editing ? (
+            <input
+              autoFocus
+              value={value || ""}
+              onChange={(e) => onChange(e.target.value)}
+              onBlur={() => setEditing(false)}
+              onKeyDown={(e) => e.key === "Enter" && setEditing(false)}
+              placeholder="画像のURLを入力（https://...）"
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1.5px solid ${S.accent}`, fontSize: 12.5, fontFamily: S.font, background: "#FAFAF8" }}
+            />
+          ) : value ? (
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: S.textMuted, wordBreak: "break-all" }}>{value}</span>
+              <button onClick={() => setEditing(true)} style={{ fontSize: 11, color: S.accent, background: "none", border: "none", cursor: "pointer", fontWeight: 700, flexShrink: 0 }}>変更</button>
+              <button onClick={() => onChange("")} style={{ fontSize: 11, color: S.danger, background: "none", border: "none", cursor: "pointer", fontWeight: 700, flexShrink: 0 }}>削除</button>
+            </div>
+          ) : (
+            <button onClick={() => setEditing(true)} style={{ fontSize: 12, color: S.accent, background: "none", border: "none", cursor: "pointer", fontWeight: 700, padding: 0 }}>+ 画像を設定</button>
+          )}
+          {hint && <div style={{ fontSize: 10.5, color: S.textMuted, marginTop: 4 }}>{hint}</div>}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // SVG円グラフコンポーネント
 const PieChart = ({ data, size = 180 }) => {
@@ -1052,6 +1095,7 @@ export default function PersonalityDiagnosisApp() {
     setEditingQuestion({
       id: newId, text: "",
       intent: "",
+      imageUrl: "",
       choices: [
         { id: newId + "_a", label: "", typeId: types.filter(t => adminSelectedForm?.typeIds.includes(t.id))[0]?.id || "", score: 1 },
         { id: newId + "_b", label: "", typeId: types.filter(t => adminSelectedForm?.typeIds.includes(t.id))[1]?.id || "", score: 1 },
@@ -1117,7 +1161,7 @@ export default function PersonalityDiagnosisApp() {
 
   // タイプCRUD
   const addType = () => {
-    setEditingType({ id: "type_" + uid(), name: "", color: "#888888", icon: "🔷", userDescription: "", adminDescription: "", isNew: true, creatorName: isCreatorLoggedIn ? loggedInCreatorName : "", formId: adminSelectedFormId || "" });
+    setEditingType({ id: "type_" + uid(), name: "", color: "#888888", icon: "🔷", imageUrl: "", userDescription: "", adminDescription: "", isNew: true, creatorName: isCreatorLoggedIn ? loggedInCreatorName : "", formId: adminSelectedFormId || "" });
   };
   const saveType = async () => {
     if (!editingType || !editingType.name.trim()) return;
@@ -1580,8 +1624,15 @@ export default function PersonalityDiagnosisApp() {
                 {/* 結果表示ON */}
                 <div style={{ textAlign: "center", animation: "fadeUp 0.6s ease-out", marginBottom: 24 }}>
                   <div style={{ fontSize: 14, color: S.textMuted, fontWeight: 500, marginBottom: 8, letterSpacing: "0.1em" }}>あなたの診断結果</div>
-                  <div style={{ fontSize: 64, animation: "scaleIn 0.8s ease-out 0.3s both" }}>{topType.icon}</div>
+                  {!topType.imageUrl && (
+                    <div style={{ fontSize: 64, animation: "scaleIn 0.8s ease-out 0.3s both" }}>{topType.icon}</div>
+                  )}
                 </div>
+                {topType.imageUrl && (
+                  <div style={{ marginBottom: 20, borderRadius: "20px", overflow: "hidden", boxShadow: S.shadowLg, animation: "fadeUp 0.7s ease-out 0.1s both" }}>
+                    <img src={topType.imageUrl} alt={topType.name} style={{ width: "100%", maxHeight: 320, objectFit: "cover", display: "block" }} />
+                  </div>
+                )}
                 <div style={{ background: S.card, borderRadius: "20px", padding: "32px 28px", boxShadow: S.shadowLg, animation: "fadeUp 0.8s ease-out 0.2s both", marginBottom: 20, border: `1px solid ${S.border}` }}>
                   <div style={{ textAlign: "center", marginBottom: 24 }}>
                     <div style={{ display: "inline-block", padding: "6px 20px", borderRadius: "24px", background: topType.color + "18", color: topType.color, fontWeight: 700, fontSize: 20 }}>{topType.name}</div>
@@ -1649,6 +1700,9 @@ export default function PersonalityDiagnosisApp() {
           <div key={q.id} style={{ maxWidth: 480, width: "100%", animation: animDir === "right" ? "slideIn 0.4s ease-out" : "slideInLeft 0.4s ease-out" }}>
             <div style={{ textAlign: "center", marginBottom: 32 }}>
               <div style={{ fontSize: 13, color: S.textMuted, fontWeight: 500, marginBottom: 8, letterSpacing: "0.05em" }}>Q{currentQ + 1}</div>
+              {q.imageUrl && (
+                <img src={q.imageUrl} alt="" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 16, boxShadow: S.shadow, marginBottom: 16, objectFit: "cover" }} />
+              )}
               <h2 style={{ fontSize: 22, fontWeight: 900, color: S.text, letterSpacing: "-0.02em", lineHeight: 1.5 }}>{q.text}</h2>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -2263,6 +2317,12 @@ export default function PersonalityDiagnosisApp() {
             <Label>質問文</Label>
             <Input value={editingQuestion.text} onChange={(v) => setEditingQuestion((p) => ({ ...p, text: v }))} placeholder="例：休日、急に予定が空いたら？" />
           </div>
+          <ImagePicker
+            label="質問画像（任意）"
+            hint="回答者の質問画面に表示されます"
+            value={editingQuestion.imageUrl}
+            onChange={(v) => setEditingQuestion((p) => ({ ...p, imageUrl: v }))}
+          />
           <div style={{ marginBottom: 16 }}>
             <Label>
               質問の意図
@@ -2369,6 +2429,13 @@ export default function PersonalityDiagnosisApp() {
             <div style={{ width: 72 }}><Label>アイコン</Label><Input value={editingType.icon} onChange={(v) => setEditingType((p) => ({ ...p, icon: v }))} placeholder="🔷" /></div>
             <div style={{ width: 72 }}><Label>カラー</Label><input type="color" value={editingType.color} onChange={(e) => setEditingType((p) => ({ ...p, color: e.target.value }))} style={{ width: "100%", height: 42, borderRadius: 8, border: `1.5px solid ${S.border}`, cursor: "pointer", padding: 2, background: "#FAFAF8" }} /></div>
           </div>
+          <ImagePicker
+            label="タイプ画像（任意）"
+            hint="診断結果画面でLPのように大きく表示されます"
+            size={120}
+            value={editingType.imageUrl}
+            onChange={(v) => setEditingType((p) => ({ ...p, imageUrl: v }))}
+          />
           <div style={{ marginBottom: 16 }}><Label>ユーザー向け説明文</Label><TextArea value={editingType.userDescription} onChange={(v) => setEditingType((p) => ({ ...p, userDescription: v }))} placeholder="本人に表示する説明" rows={4} /></div>
           <div><Label>人事・管理者向け説明文</Label><TextArea value={editingType.adminDescription} onChange={(v) => setEditingType((p) => ({ ...p, adminDescription: v }))} placeholder="管理者向けの分析情報" rows={4} /></div>
         </Modal>
