@@ -1705,21 +1705,41 @@ export default function PersonalityDiagnosisApp() {
               )}
               <h2 style={{ fontSize: 22, fontWeight: 900, color: S.text, letterSpacing: "-0.02em", lineHeight: 1.5 }}>{q.text}</h2>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {q.choices.map((c, i) => {
-                const isSelected = selectedChoice === c.id || answers[q.id] === c.id;
-                const labels = ["A", "B", "C", "D", "E", "F"];
-                return (
-                  <button key={c.id} className={`choice-btn ${isSelected ? "selected" : ""}`} onClick={() => selectAnswer(c.id)}
-                    style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 20px", borderRadius: S.radiusSm, border: `1.5px solid ${isSelected ? S.accent : S.border}`, background: isSelected ? S.accentLight : S.card, cursor: "pointer", textAlign: "left", fontFamily: S.font, boxShadow: isSelected ? `0 4px 16px ${S.accent}20` : S.shadow }}>
-                    <span style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, flexShrink: 0, background: isSelected ? S.accent : S.bg, color: isSelected ? "#fff" : S.textMuted, transition: "all 0.2s" }}>
-                      {isSelected ? <Icon name="check" size={14} /> : labels[i]}
-                    </span>
-                    <span style={{ fontSize: 15, fontWeight: 500, color: S.text, lineHeight: 1.5 }}>{c.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {q.choices.some((c) => c.imageUrl) ? (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {q.choices.map((c, i) => {
+                  const isSelected = selectedChoice === c.id || answers[q.id] === c.id;
+                  const labels = ["A", "B", "C", "D", "E", "F"];
+                  return (
+                    <button key={c.id} className={`choice-btn ${isSelected ? "selected" : ""}`} onClick={() => selectAnswer(c.id)}
+                      style={{ display: "flex", flexDirection: "column", borderRadius: S.radiusSm, border: `1.5px solid ${isSelected ? S.accent : S.border}`, background: isSelected ? S.accentLight : S.card, cursor: "pointer", textAlign: "left", fontFamily: S.font, boxShadow: isSelected ? `0 4px 16px ${S.accent}20` : S.shadow, overflow: "hidden", padding: 0 }}>
+                      <div style={{ width: "100%", aspectRatio: "1 / 1", background: c.imageUrl ? `#eee url("${c.imageUrl}") center/cover no-repeat` : S.bg, position: "relative" }}>
+                        <span style={{ position: "absolute", top: 8, left: 8, width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12, background: isSelected ? S.accent : "rgba(255,255,255,0.9)", color: isSelected ? "#fff" : S.textMuted, boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }}>
+                          {isSelected ? <Icon name="check" size={13} /> : labels[i]}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: 13.5, fontWeight: 500, color: S.text, lineHeight: 1.5, padding: "10px 12px" }}>{c.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {q.choices.map((c, i) => {
+                  const isSelected = selectedChoice === c.id || answers[q.id] === c.id;
+                  const labels = ["A", "B", "C", "D", "E", "F"];
+                  return (
+                    <button key={c.id} className={`choice-btn ${isSelected ? "selected" : ""}`} onClick={() => selectAnswer(c.id)}
+                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 20px", borderRadius: S.radiusSm, border: `1.5px solid ${isSelected ? S.accent : S.border}`, background: isSelected ? S.accentLight : S.card, cursor: "pointer", textAlign: "left", fontFamily: S.font, boxShadow: isSelected ? `0 4px 16px ${S.accent}20` : S.shadow }}>
+                      <span style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, flexShrink: 0, background: isSelected ? S.accent : S.bg, color: isSelected ? "#fff" : S.textMuted, transition: "all 0.2s" }}>
+                        {isSelected ? <Icon name="check" size={14} /> : labels[i]}
+                      </span>
+                      <span style={{ fontSize: 15, fontWeight: 500, color: S.text, lineHeight: 1.5 }}>{c.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2337,25 +2357,33 @@ export default function PersonalityDiagnosisApp() {
           </div>
           <Label>選択肢とスコア</Label>
           {editingQuestion.choices.map((c, i) => (
-            <div key={c.id} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: S.accent, width: 18, textAlign: "center" }}>{["A", "B", "C", "D", "E", "F"][i]}</span>
-              <input value={c.label} onChange={(e) => { const nc = [...editingQuestion.choices]; nc[i] = { ...nc[i], label: e.target.value }; setEditingQuestion((p) => ({ ...p, choices: nc })); }} placeholder="選択肢"
-                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 13, fontFamily: S.font, color: S.text, background: "#FAFAF8" }} />
-              <select value={c.typeId} onChange={(e) => { const nc = [...editingQuestion.choices]; nc[i] = { ...nc[i], typeId: e.target.value }; setEditingQuestion((p) => ({ ...p, choices: nc })); }}
-                style={{ padding: "8px 8px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 12, fontFamily: S.font, color: S.text, background: "#FAFAF8", maxWidth: 150 }}>
-                <option value="">タイプ</option>
-                {types.filter(t => { const qFormId = editingQuestion.formId || adminSelectedFormId; const qForm = forms.find(f => f.id === qFormId); return qForm ? qForm.typeIds.includes(t.id) : false; }).map((t) => (<option key={t.id} value={t.id}>{t.icon} {t.name}</option>))}
-              </select>
-              <input type="number" value={c.score} onChange={(e) => { const nc = [...editingQuestion.choices]; nc[i] = { ...nc[i], score: parseInt(e.target.value) || 0 }; setEditingQuestion((p) => ({ ...p, choices: nc })); }}
-                style={{ width: 50, padding: "8px 6px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 13, fontFamily: S.font, textAlign: "center", background: "#FAFAF8" }} min="0" />
-              {editingQuestion.choices.length > 2 && (
-                <button onClick={() => { const nc = editingQuestion.choices.filter((_, idx) => idx !== i); setEditingQuestion((p) => ({ ...p, choices: nc })); }}
-                  style={{ background: S.dangerLight, border: "none", borderRadius: 6, padding: 4, cursor: "pointer", color: S.danger, flexShrink: 0 }}><Icon name="x" size={14} /></button>
-              )}
+            <div key={c.id} style={{ marginBottom: 10, padding: 10, borderRadius: 10, border: `1.5px solid ${S.border}`, background: "#FAFAF8" }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: S.accent, width: 18, textAlign: "center" }}>{["A", "B", "C", "D", "E", "F"][i]}</span>
+                <input value={c.label} onChange={(e) => { const nc = [...editingQuestion.choices]; nc[i] = { ...nc[i], label: e.target.value }; setEditingQuestion((p) => ({ ...p, choices: nc })); }} placeholder="選択肢"
+                  style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 13, fontFamily: S.font, color: S.text, background: "#fff" }} />
+                <select value={c.typeId} onChange={(e) => { const nc = [...editingQuestion.choices]; nc[i] = { ...nc[i], typeId: e.target.value }; setEditingQuestion((p) => ({ ...p, choices: nc })); }}
+                  style={{ padding: "8px 8px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 12, fontFamily: S.font, color: S.text, background: "#fff", maxWidth: 150 }}>
+                  <option value="">タイプ</option>
+                  {types.filter(t => { const qFormId = editingQuestion.formId || adminSelectedFormId; const qForm = forms.find(f => f.id === qFormId); return qForm ? qForm.typeIds.includes(t.id) : false; }).map((t) => (<option key={t.id} value={t.id}>{t.icon} {t.name}</option>))}
+                </select>
+                <input type="number" value={c.score} onChange={(e) => { const nc = [...editingQuestion.choices]; nc[i] = { ...nc[i], score: parseInt(e.target.value) || 0 }; setEditingQuestion((p) => ({ ...p, choices: nc })); }}
+                  style={{ width: 50, padding: "8px 6px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 13, fontFamily: S.font, textAlign: "center", background: "#fff" }} min="0" />
+                {editingQuestion.choices.length > 2 && (
+                  <button onClick={() => { const nc = editingQuestion.choices.filter((_, idx) => idx !== i); setEditingQuestion((p) => ({ ...p, choices: nc })); }}
+                    style={{ background: S.dangerLight, border: "none", borderRadius: 6, padding: 4, cursor: "pointer", color: S.danger, flexShrink: 0 }}><Icon name="x" size={14} /></button>
+                )}
+              </div>
+              <ImagePicker
+                size={56}
+                hint="設定すると、回答者は画像をタップして選べます"
+                value={c.imageUrl}
+                onChange={(v) => { const nc = [...editingQuestion.choices]; nc[i] = { ...nc[i], imageUrl: v }; setEditingQuestion((p) => ({ ...p, choices: nc })); }}
+              />
             </div>
           ))}
           {editingQuestion.choices.length < 6 && (
-            <button onClick={() => { const newId = editingQuestion.id + "_" + uid(); const qFormId = editingQuestion.formId || adminSelectedFormId; const qForm = forms.find(f => f.id === qFormId); const defaultTypeId = (qForm ? types.filter(t => qForm.typeIds.includes(t.id)) : [])[0]?.id || ""; setEditingQuestion((p) => ({ ...p, choices: [...p.choices, { id: newId, label: "", typeId: defaultTypeId, score: 1 }] })); }}
+            <button onClick={() => { const newId = editingQuestion.id + "_" + uid(); const qFormId = editingQuestion.formId || adminSelectedFormId; const qForm = forms.find(f => f.id === qFormId); const defaultTypeId = (qForm ? types.filter(t => qForm.typeIds.includes(t.id)) : [])[0]?.id || ""; setEditingQuestion((p) => ({ ...p, choices: [...p.choices, { id: newId, label: "", typeId: defaultTypeId, score: 1, imageUrl: "" }] })); }}
               style={{ fontSize: 12, color: S.accent, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: S.font, marginTop: 4 }}>+ 選択肢を追加</button>
           )}
 
