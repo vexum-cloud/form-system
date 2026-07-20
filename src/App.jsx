@@ -1772,7 +1772,8 @@ export default function PersonalityDiagnosisApp() {
     if (targetResponses.length === 0) return showToast("ダウンロードするデータがありません");
 
     // 全ての質問列のヘッダーを作成
-    const headerRow = ["回答日時", "所属", "氏名", "結果タイプ", "タイプ数"];
+    const formFields = getActiveFields(adminSelectedForm).filter(f => f.enabled && f.key !== "date");
+    const headerRow = ["回答日時", ...formFields.map(f => f.label), "結果タイプ", "タイプ数"];
     const formQs = adminSelectedForm.questionIds.map(qid => questions.find(q => q.id === qid)).filter(Boolean);
     formQs.forEach((q, i) => {
       headerRow.push(`Q${i + 1} 質問`);
@@ -1787,8 +1788,10 @@ export default function PersonalityDiagnosisApp() {
       const dateStr = new Date(r.submittedAt).toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
       const baseRow = [
         dateStr,
-        r.respondentInfo.department || "",
-        r.respondentInfo.name,
+        ...formFields.map(f => {
+          const key = f.builtin ? f.key : f.id;
+          return r.respondentInfo?.[key] || "";
+        }),
         r.resultTypeLabel,
         typeCount
       ];
@@ -1988,14 +1991,18 @@ export default function PersonalityDiagnosisApp() {
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: `2px solid ${S.border}`, background: "#FAFAF8" }}>
-                      {["回答日時", "所属", "氏名", "結果タイプ", "タイプ数", ""].map((h, i) => (
-                        <th key={i} style={{ padding: "12px 14px", textAlign: "left", fontWeight: 700, color: S.textMuted, fontSize: 12, whiteSpace: "nowrap" }}>{h}</th>
+                      <th style={{ padding: "12px 14px", textAlign: "left", fontWeight: 700, color: S.textMuted, fontSize: 12, whiteSpace: "nowrap" }}>回答日時</th>
+                      {getActiveFields(adminSelectedForm).filter(f => f.enabled && f.key !== "date").map(f => (
+                        <th key={f.id} style={{ padding: "12px 14px", textAlign: "left", fontWeight: 700, color: S.textMuted, fontSize: 12, whiteSpace: "nowrap" }}>{f.label}</th>
                       ))}
+                      <th style={{ padding: "12px 14px", textAlign: "left", fontWeight: 700, color: S.textMuted, fontSize: 12, whiteSpace: "nowrap" }}>結果タイプ</th>
+                      <th style={{ padding: "12px 14px", textAlign: "left", fontWeight: 700, color: S.textMuted, fontSize: 12, whiteSpace: "nowrap" }}>タイプ数</th>
+                      <th style={{ padding: "12px 14px" }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredResponses.filter((r) => r.formId === adminSelectedFormId).length === 0 ? (
-                      <tr><td colSpan={6} style={{ padding: "40px 14px", textAlign: "center", color: S.textMuted }}>回答データがありません</td></tr>
+                      <tr><td colSpan={4 + getActiveFields(adminSelectedForm).filter(f => f.enabled && f.key !== "date").length} style={{ padding: "40px 14px", textAlign: "center", color: S.textMuted }}>回答データがありません</td></tr>
                     ) : filteredResponses.filter((r) => r.formId === adminSelectedFormId).map((r) => {
                       const t = types.find((tp) => tp.id === r.resultTypeId);
                       return (
@@ -2003,8 +2010,11 @@ export default function PersonalityDiagnosisApp() {
                           onMouseEnter={(e) => e.currentTarget.style.background = "#FAFAF8"}
                           onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                           <td style={{ padding: "12px 14px", whiteSpace: "nowrap", color: S.textMuted }}>{new Date(r.submittedAt).toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
-                          <td style={{ padding: "12px 14px", whiteSpace: "nowrap", color: S.text }}>{r.respondentInfo.department || "—"}</td>
-                          <td style={{ padding: "12px 14px", whiteSpace: "nowrap", fontWeight: 600, color: S.text }}>{r.respondentInfo.name}</td>
+                          {getActiveFields(adminSelectedForm).filter(f => f.enabled && f.key !== "date").map(f => {
+                            const key = f.builtin ? f.key : f.id;
+                            const val = r.respondentInfo?.[key];
+                            return <td key={f.id} style={{ padding: "12px 14px", whiteSpace: "nowrap", color: S.text }}>{val || "—"}</td>;
+                          })}
                           <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
                             <span style={{ padding: "4px 10px", borderRadius: 6, background: (t?.color || "#888") + "14", color: t?.color || "#888", fontWeight: 600, fontSize: 12 }}>{r.resultTypeIcon} {r.resultTypeLabel}</span>
                           </td>
@@ -2733,12 +2743,21 @@ export default function PersonalityDiagnosisApp() {
                 {/* 回答者情報 */}
                 <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: "16px", marginBottom: 16 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: S.textMuted, marginBottom: 10 }}>回答者情報</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 13 }}>
-                    <div><span style={{ color: S.textMuted }}>回答日：</span><span style={{ fontWeight: 600, color: S.text }}>{r.respondentInfo.date}</span></div>
-                    <div><span style={{ color: S.textMuted }}>所属：</span><span style={{ fontWeight: 600, color: S.text }}>{r.respondentInfo.department || "—"}</span></div>
-                    <div><span style={{ color: S.textMuted }}>氏名：</span><span style={{ fontWeight: 600, color: S.text }}>{r.respondentInfo.name}</span></div>
-                    <div><span style={{ color: S.textMuted }}>メール：</span><span style={{ fontWeight: 600, color: S.text }}>{r.respondentInfo.email || "—"}</span></div>
-                  </div>
+                  {(() => {
+                    const responseForm = forms.find(frm => frm.id === r.formId);
+                    const activeFields = getActiveFields(responseForm).filter(f => f.enabled);
+                    return (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 13 }}>
+                        {activeFields.map(f => {
+                          const key = f.builtin ? f.key : f.id;
+                          const val = r.respondentInfo?.[key];
+                          return (
+                            <div key={f.id}><span style={{ color: S.textMuted }}>{f.label}：</span><span style={{ fontWeight: 600, color: S.text }}>{val || "—"}</span></div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* 診断結果 */}
