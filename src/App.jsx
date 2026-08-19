@@ -1012,10 +1012,11 @@ export default function PersonalityDiagnosisApp() {
     }
     if (responseFilter.keyword.trim()) {
       const kw = responseFilter.keyword.trim().toLowerCase();
-      list = list.filter(
-        (r) =>
-          r.respondentInfo.name.toLowerCase().includes(kw) ||
-          r.respondentInfo.department.toLowerCase().includes(kw)
+      // 氏名・所属だけでなく、オリジナル項目を含む回答者情報の全項目を検索対象にする
+      list = list.filter((r) =>
+        Object.values(r.respondentInfo || {}).some((v) =>
+          String(v ?? "").toLowerCase().includes(kw)
+        )
       );
     }
     list.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
@@ -1903,7 +1904,7 @@ export default function PersonalityDiagnosisApp() {
                   style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 13, fontFamily: S.font, color: S.text, background: "#FAFAF8" }} />
               </div>
               <div style={{ flex: 1, minWidth: 180 }}>
-                <Label>氏名・所属で検索</Label>
+                <Label>回答者情報の全項目で検索</Label>
                 <div style={{ position: "relative" }}>
                   <input value={responseFilter.keyword} onChange={(e) => setResponseFilter((p) => ({ ...p, keyword: e.target.value }))} placeholder="検索..."
                     style={{ width: "100%", padding: "8px 12px 8px 32px", borderRadius: 8, border: `1.5px solid ${S.border}`, fontSize: 13, fontFamily: S.font, color: S.text, background: "#FAFAF8" }} />
