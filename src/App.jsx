@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { db } from "./firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, query, where } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, getDoc, query, where, documentId } from "firebase/firestore";
 
 // ============================================================
 // 性格診断フォーム作成システム（完全版）
@@ -664,6 +664,7 @@ export default function PersonalityDiagnosisApp() {
   const [editingForm, setEditingForm] = useState(null);
   const [previewingForm, setPreviewingForm] = useState(null);
   const [previewValues, setPreviewValues] = useState({});
+  const [sharingForm, setSharingForm] = useState(null); // 共有先サブ管理者を選ぶモーダル用
   const [toast, setToast] = useState(null);
 
   // --- 回答一覧フィルター ---
@@ -739,19 +740,46 @@ export default function PersonalityDiagnosisApp() {
     }
   }, []);
 
-  // FirestoreからカスタムTypes取得（サブ管理者は自分のもの、管理者は全件+ハードコード）
-  const fetchTypes = useCallback(async (creatorName) => {
+  // FirestoreドキュメントIDの配列を30件ずつのチャンクに分けて in クエリで取得
+  const fetchDocsByIds = async (collectionName, ids) => {
+    const uniqueIds = Array.from(new Set(ids)).filter(Boolean);
+    if (uniqueIds.length === 0) return [];
+    const chunks = [];
+    for (let i = 0; i < uniqueIds.length; i += 30) chunks.push(uniqueIds.slice(i, i + 30));
+    const results = await Promise.all(
+      chunks.map(async (chunk) => {
+        const q = query(collection(db, collectionName), where(documentId(), "in", chunk));
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
+      })
+    );
+    return results.flat();
+  };
+
+  // FirestoreからカスタムTypes取得（サブ管理者は自分のもの＋共有されたフォームのもの、管理者は全件+ハードコード）
+  // sharedIds: 共有フォーム経由で閲覧が必要なタイプID一覧（自分のものと重複していてもよい）
+  const fetchTypes = useCallback(async (creatorName, sharedIds) => {
     try {
-      const q = creatorName
-        ? query(collection(db, "types"), where("creatorName", "==", creatorName))
-        : collection(db, "types");
-      const snap = await getDocs(q);
-      const firestoreTypes = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
       if (creatorName) {
-        // サブ管理者：Firestoreの自分のタイプのみ（ハードコードなし）
-        setTypes(firestoreTypes);
+        // サブ管理者：自分が作成したタイプ
+        const q = query(collection(db, "types"), where("creatorName", "==", creatorName));
+        const snap = await getDocs(q);
+        const own = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
+        const ownIds = new Set(own.map((t) => t.id));
+        const neededIds = (sharedIds || []).filter((id) => !ownIds.has(id));
+        // 共有フォームのタイプ：ハードコード定義分はそのまま利用
+        const hardcoded = ALL_TYPES.filter((t) => neededIds.includes(t.id));
+        const hardcodedIds = new Set(hardcoded.map((t) => t.id));
+        // 残りはFirestoreからID指定で取得
+        const remainingIds = neededIds.filter((id) => !hardcodedIds.has(id));
+        const shared = await fetchDocsByIds("types", remainingIds);
+        const merged = [...own, ...hardcoded, ...shared];
+        const uniq = Array.from(new Map(merged.map((t) => [t.id, t])).values());
+        setTypes(uniq);
       } else {
         // 管理者：ハードコード + Firestoreの全カスタムタイプ（重複除外）
+        const snap = await getDocs(collection(db, "types"));
+        const firestoreTypes = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
         const fsIds = new Set(firestoreTypes.map(t => t.id));
         setTypes([...ALL_TYPES.filter(t => !fsIds.has(t.id)), ...firestoreTypes]);
       }
@@ -762,19 +790,27 @@ export default function PersonalityDiagnosisApp() {
     }
   }, []);
 
-  // FirestoreからカスタムQuestions取得
-  const fetchQuestions = useCallback(async (creatorName) => {
+  // FirestoreからカスタムQuestions取得（サブ管理者は自分のもの＋共有されたフォームのもの）
+  const fetchQuestions = useCallback(async (creatorName, sharedIds) => {
     try {
-      const q = creatorName
-        ? query(collection(db, "questions"), where("creatorName", "==", creatorName))
-        : collection(db, "questions");
-      const snap = await getDocs(q);
-      const firestoreQs = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
       if (creatorName) {
-        // サブ管理者：自分の質問のみ
-        setQuestions(firestoreQs);
+        // サブ管理者：自分が作成した質問
+        const q = query(collection(db, "questions"), where("creatorName", "==", creatorName));
+        const snap = await getDocs(q);
+        const own = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
+        const ownIds = new Set(own.map((qq) => qq.id));
+        const neededIds = (sharedIds || []).filter((id) => !ownIds.has(id));
+        const hardcoded = ALL_QUESTIONS.filter((qq) => neededIds.includes(qq.id));
+        const hardcodedIds = new Set(hardcoded.map((qq) => qq.id));
+        const remainingIds = neededIds.filter((id) => !hardcodedIds.has(id));
+        const shared = await fetchDocsByIds("questions", remainingIds);
+        const merged = [...own, ...hardcoded, ...shared];
+        const uniq = Array.from(new Map(merged.map((qq) => [qq.id, qq])).values());
+        setQuestions(uniq);
       } else {
         // 管理者：ハードコード + Firestoreの全カスタム質問
+        const snap = await getDocs(collection(db, "questions"));
+        const firestoreQs = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
         const fsIds = new Set(firestoreQs.map(q => q.id));
         setQuestions([...ALL_QUESTIONS.filter(q => !fsIds.has(q.id)), ...firestoreQs]);
       }
@@ -797,20 +833,24 @@ export default function PersonalityDiagnosisApp() {
   }, [fetchResponses, fetchForms, fetchCreators, fetchSettings, fetchTypes, fetchQuestions]);
 
   // サブ管理者ログイン時にそのクリエイターのタイプ・質問を再取得
+  // （自分が作成したフォームに加え、共有されたフォームに紐づくタイプ・質問も対象にする）
   useEffect(() => {
     if (isCreatorLoggedIn && loggedInCreatorName) {
-      fetchTypes(loggedInCreatorName);
-      fetchQuestions(loggedInCreatorName);
+      const myForms = forms.filter((f) => f.creatorName === loggedInCreatorName || (f.sharedWith || []).includes(loggedInCreatorName));
+      const typeIds = myForms.flatMap((f) => f.typeIds || []);
+      const questionIds = myForms.flatMap((f) => f.questionIds || []);
+      fetchTypes(loggedInCreatorName, typeIds);
+      fetchQuestions(loggedInCreatorName, questionIds);
     } else if (!isCreatorLoggedIn) {
       fetchTypes(null);
       fetchQuestions(null);
     }
-  }, [isCreatorLoggedIn, loggedInCreatorName, fetchTypes, fetchQuestions]);
+  }, [isCreatorLoggedIn, loggedInCreatorName, forms, fetchTypes, fetchQuestions]);
 
-  // サブ管理者の選択中フォームが自分のものでない場合は自分のフォームに切替
+  // サブ管理者の選択中フォームが自分のもの・共有されたものでない場合は切替
   useEffect(() => {
     if (!isCreatorLoggedIn || !loggedInCreatorName) return;
-    const myForms = forms.filter((f) => f.creatorName === loggedInCreatorName);
+    const myForms = forms.filter((f) => f.creatorName === loggedInCreatorName || (f.sharedWith || []).includes(loggedInCreatorName));
     if (myForms.length === 0) return;
     const isMine = myForms.some((f) => f.id === adminSelectedFormId);
     if (!isMine) setAdminSelectedFormId(myForms[0].id);
@@ -994,10 +1034,10 @@ export default function PersonalityDiagnosisApp() {
   // --- フィルタリングされた回答一覧 ---
   const filteredResponses = useMemo(() => {
     let list = [...responses];
-    // サブ管理者ログイン時は自分が作ったフォームの回答のみに限定
+    // サブ管理者ログイン時は自分が作った・共有されたフォームの回答のみに限定
     if (isCreatorLoggedIn && loggedInCreatorName) {
       const myFormIds = new Set(
-        forms.filter((f) => f.creatorName === loggedInCreatorName).map((f) => f.id)
+        forms.filter((f) => f.creatorName === loggedInCreatorName || (f.sharedWith || []).includes(loggedInCreatorName)).map((f) => f.id)
       );
       list = list.filter((r) => myFormIds.has(r.formId));
     }
@@ -1215,7 +1255,7 @@ export default function PersonalityDiagnosisApp() {
   // フォームCRUD
   const addForm = () => {
     const newId = "form_" + uid();
-    setEditingForm({ id: newId, slug: newId, name: "", description: "", questionIds: [], typeIds: [], showResultToRespondent: true, showScoreDetails: true, fields: cloneDefaultFields(), createdAt: Date.now(), isNew: true, creatorName: isCreatorLoggedIn ? loggedInCreatorName : "" });
+    setEditingForm({ id: newId, slug: newId, name: "", description: "", questionIds: [], typeIds: [], showResultToRespondent: true, showScoreDetails: true, fields: cloneDefaultFields(), createdAt: Date.now(), isNew: true, creatorName: isCreatorLoggedIn ? loggedInCreatorName : "", sharedWith: [] });
   };
   const saveForm = async () => {
     if (!editingForm || !editingForm.name.trim()) return;
@@ -1240,6 +1280,26 @@ export default function PersonalityDiagnosisApp() {
     }
     setForms((prev) => prev.filter((f) => f.id !== id));
     showToast("フォームを削除しました");
+  };
+
+  // --- フォームのサブ管理者への共有設定を更新 ---
+  // 共有すると、対象のサブ管理者は回答一覧・質問管理・タイプ管理・フォーム管理の
+  // それぞれでこのフォームの内容をまるごと閲覧・編集できるようになる。
+  const updateFormSharing = async (formId, sharedWith) => {
+    try {
+      await setDoc(doc(db, "forms", formId), { sharedWith }, { merge: true });
+    } catch (e) {
+      console.error("フォーム共有設定の保存エラー:", e);
+    }
+    setForms((prev) => prev.map((f) => (f.id === formId ? { ...f, sharedWith } : f)));
+    setEditingForm((p) => (p && p.id === formId ? { ...p, sharedWith } : p));
+    setSharingForm((p) => (p && p.id === formId ? { ...p, sharedWith } : p));
+  };
+
+  const toggleShareWithCreator = (formId, currentSharedWith, creatorName) => {
+    const current = currentSharedWith || [];
+    const next = current.includes(creatorName) ? current.filter((n) => n !== creatorName) : [...current, creatorName];
+    updateFormSharing(formId, next);
   };
 
   // 複製
@@ -1362,7 +1422,7 @@ export default function PersonalityDiagnosisApp() {
     }
 
     const { _docId, ...rest } = f;
-    const newF = { ...rest, id: newFormId, slug: newSlug, name: f.name + "（コピー）", questionIds: newQuestionIds, typeIds: newTypeIds, createdAt: Date.now() };
+    const newF = { ...rest, id: newFormId, slug: newSlug, name: f.name + "（コピー）", questionIds: newQuestionIds, typeIds: newTypeIds, createdAt: Date.now(), sharedWith: [] };
     try {
       await setDoc(doc(db, "forms", newFormId), newF);
     } catch (e) {
@@ -1761,7 +1821,7 @@ export default function PersonalityDiagnosisApp() {
   ];
   const adminTabs = isCreatorLoggedIn ? adminTabsAll.filter((t) => ["responses", "questions", "types", "forms"].includes(t.key)) : adminTabsAll;
 
-  const visibleForms = isCreatorLoggedIn ? forms.filter((f) => f.creatorName === loggedInCreatorName) : forms;
+  const visibleForms = isCreatorLoggedIn ? forms.filter((f) => f.creatorName === loggedInCreatorName || (f.sharedWith || []).includes(loggedInCreatorName)) : forms;
 
   // 管理者質問一覧のフォーム別フィルター用
   const getFormForQuestion = (qId) => visibleForms.filter((f) => f.questionIds.includes(qId));
@@ -2148,7 +2208,7 @@ export default function PersonalityDiagnosisApp() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <div>
                 <h2 style={{ fontSize: 20, fontWeight: 900, color: S.text }}>フォーム管理</h2>
-                <p style={{ fontSize: 13, color: S.textMuted, marginTop: 4 }}>{forms.length}件のフォーム</p>
+                <p style={{ fontSize: 13, color: S.textMuted, marginTop: 4 }}>{visibleForms.length}件のフォーム</p>
               </div>
               <button onClick={addForm} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: S.radiusSm, border: "none", background: S.accent, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: S.font }}>
                 <Icon name="plus" size={16} /> フォームを追加
@@ -2182,6 +2242,9 @@ export default function PersonalityDiagnosisApp() {
                       ))}
                       {f.creatorName && (
                         <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "#FFF3E0", color: "#E65100", fontWeight: 700 }}> 作成者: {f.creatorName}</span>
+                      )}
+                      {(f.sharedWith || []).length > 0 && (
+                        <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: S.accentLight, color: S.accent, fontWeight: 700 }}>🔗 共有中: {f.sharedWith.join("、")}</span>
                       )}
                     </div>
 
@@ -2676,6 +2739,65 @@ export default function PersonalityDiagnosisApp() {
                 </div>
               </div>
             </>
+          )}
+
+          {/* ====== サブ管理者への共有 ====== */}
+          {!editingForm.isNew && (
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px dashed ${S.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <Label>サブ管理者と共有</Label>
+                <button onClick={() => setSharingForm(editingForm)}
+                  style={{ padding: "6px 12px", borderRadius: 6, border: `1.5px solid ${S.accent}`, background: S.card, color: S.accent, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: S.font }}>
+                  🔗 共有
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: S.textMuted, marginBottom: 10, lineHeight: 1.6 }}>
+                共有すると、選んだサブ管理者がこのフォームの内容（回答一覧・質問管理・タイプ管理・フォーム管理）をまるごと閲覧・編集できるようになります。
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {(editingForm.sharedWith || []).length === 0 ? (
+                  <span style={{ fontSize: 12, color: S.textMuted }}>まだ共有されていません</span>
+                ) : (
+                  (editingForm.sharedWith || []).map((name) => (
+                    <span key={name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, padding: "4px 6px 4px 12px", borderRadius: 20, background: S.accentLight, color: S.accent, fontWeight: 600 }}>
+                      {name}
+                      <button onClick={() => toggleShareWithCreator(editingForm.id, editingForm.sharedWith, name)}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: S.accent, fontWeight: 900, fontSize: 13, padding: "0 4px", lineHeight: 1 }} title="共有を解除">×</button>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* ====== 共有先サブ管理者の選択 ====== */}
+      {sharingForm && (
+        <Modal title={`「${sharingForm.name}」を共有`} onClose={() => setSharingForm(null)} width={440}>
+          <div style={{ fontSize: 12, color: S.textMuted, marginBottom: 14, lineHeight: 1.6 }}>
+            選んだサブ管理者は、このフォームの回答一覧・質問管理・タイプ管理・フォーム管理をまるごと閲覧・編集できるようになります。もう一度クリックすると共有を解除できます。
+          </div>
+          {creators.filter((c) => c.name !== sharingForm.creatorName).length === 0 ? (
+            <div style={{ fontSize: 13, color: S.textMuted, textAlign: "center", padding: "24px 0" }}>
+              サブ管理者が登録されていません。先に「設定」からサブ管理者を追加してください。
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {creators.filter((c) => c.name !== sharingForm.creatorName).map((c) => {
+                const checked = (sharingForm.sharedWith || []).includes(c.name);
+                return (
+                  <div key={c.id} onClick={() => toggleShareWithCreator(sharingForm.id, sharingForm.sharedWith, c.name)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: `1.5px solid ${checked ? S.accent : S.border}`, background: checked ? S.accentLight : S.card, cursor: "pointer", transition: "all 0.15s" }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${checked ? S.accent : S.border}`, background: checked ? S.accent : "transparent", color: "#fff", flexShrink: 0 }}>
+                      {checked && <Icon name="check" size={12} />}
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: S.text }}>{c.name}</span>
+                    {checked && <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: S.accent }}>共有中</span>}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </Modal>
       )}
